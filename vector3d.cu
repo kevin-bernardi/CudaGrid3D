@@ -43,7 +43,7 @@ __global__ void initGridKernel(bool *grid, int numCells) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid == numCells - 1) {
-        printf("reached last cell for initialization\n");
+        printf("initializing vector3D in kernel\n");
     }
 
     if (tid < numCells) {
@@ -132,10 +132,6 @@ __global__ void insertPointCloudKernel(bool *grid, Point *pointcloud, int n, int
         if (pt.x < dimX && pt.y < dimY && pt.z < dimZ) {
             int idx = pt.y + pt.x * dimY + pt.z * dimX * dimY;
             // printf("Adding Point (%d, %d, %d) at idx %d\n", pt.x, pt.y, pt.z, idx);
-
-            if (grid[idx] == true) {
-                printf("point already set from previous pointclouds\n");
-            }
             grid[idx] = true;
         } else {
             // point out of bound
@@ -159,7 +155,7 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
 
     if (tid < n) {
         if (tid == n - 1) {
-            printf("reached last point\n");
+            printf("generating random pointcloud in kernel\n");
         }
 
         curand_init(clock(), tid, 0, &state[tid]);
@@ -194,7 +190,7 @@ __global__ void checkGridKernel(bool *grid, int numCells) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < numCells) {
-        if (tid == numCells - 1) printf("check - reached last cell\n");
+        if (tid == numCells - 1) printf("checking grid in kernel\n");
         if (grid[tid] != true && grid[tid] != false) {
             printf("Check Failed  ");
         }
@@ -371,7 +367,7 @@ void generateMesh(Vector3D *vector) {
     double dimY = vector->dimY;
     double dimZ = vector->dimZ;
 
-    double resolution = 0.5;
+    double resolution = 0.1;
 
     int numCells = dimX * dimY * dimZ;
 
@@ -407,9 +403,9 @@ int main() {
     // PARAMETERS
 
     // size of the 3D Matrix
-    int dimX = 1000;  // 10cm per unit (20 x 10 x 5 m)
-    int dimY = 1000;
-    int dimZ = 1000;
+    int dimX = 200;  // 10cm per unit (20 x 10 x 5 m)
+    int dimY = 100;
+    int dimZ = 50;
 
     // number of points to randomly generate for the pointcloud
     int numPointsToGenerate = 100000;
