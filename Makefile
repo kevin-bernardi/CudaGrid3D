@@ -1,14 +1,10 @@
-all: main.cpp
-	g++ -o test main.cpp
+lib: cuda
+	g++ -shared -o libvector.so vector3d.o -L/usr/local/cuda/lib64 -lcuda -lcudart
+	g++ test.cpp -o lib -L./ -lvector
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/serl/Documents/3d_analysis/
 
-cuda: transfer.cu
-	nvcc -o transfer.out transfer.cu
-
-vec: vector3d.cu
-	nvcc -o vector.out vector3d.cu
-
-help: struct.cu
-	nvcc -o struct struct.cu
+cuda: vector3d.cu
+	nvcc -c -Xcompiler -fPIC vector3d.cu
 
 clean:
-	rm *.out *.o *.txt *.obj
+	rm *.o *.out *.so

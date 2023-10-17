@@ -379,18 +379,18 @@ void generateMesh(Vector3D *vector) {
     fclose(fptr);
 }
 
-int main() {
+int test(int dimx, int dimy, int dimz, float res, int numPoints) {
     // PARAMETERS
 
     // size of the 3D Matrix
-    int dimX = 200;  // 10cm per unit (20 x 10 x 5 m) (200u x 100u x 50u)
-    int dimY = 100;
-    int dimZ = 50;
+    int dimX = dimx;  // 10cm per unit (20 x 10 x 5 m) (200u x 100u x 50u)
+    int dimY = dimy;
+    int dimZ = dimz;
 
-    float resolution = 0.1;  // length of the edges of a cell (in meters)
+    float resolution = res;  // length of the edges of a cell (in meters)
 
     // number of points to randomly generate for the pointcloud
-    int numPointsToGenerate = 100000;
+    int numPointsToGenerate = numPoints;
 
     // END PARAMETERS
     // ---------------------------------------------------------------------------------
@@ -486,4 +486,6 @@ int main() {
     // free heap memory
     free(h_grid);
     free(h_vector);
+
+    return 0;
 }
