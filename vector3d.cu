@@ -34,9 +34,9 @@ class Vector3D {
 
 class Point {
    public:
-    int x;
-    int y;
-    int z;
+    float x;
+    float y;
+    float z;
 };
 
 __global__ void initGridKernel(bool *grid, int numCells) {
@@ -59,32 +59,6 @@ void initGrid(Vector3D *vector) {
     initGridKernel<<<numBlocks, 256>>>(vector->grid, numCells);
     cudaDeviceSynchronize();
 }
-
-//__global__ void computeMidPointKernel(bool *grid, int n, int dimX, int dimY,
-//                                       int dimZ) {
-//     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-//     float sumx, sumy, sumz, count;
-//     sumx = sumy = sumz = count = 0.0;
-
-//     for (int i = 0; i < n; i++) {
-//         if (grid[i] == 1) {
-//             // get coordinates (x,y,z) from linear index
-
-//             int z = floor(i / (dimX * dimY));
-
-//             int x = floor((i - (z * dimX * dimY)) / dimY);
-
-//             int y = i - (x * dimY + z * dimX * dimY);
-
-//             sumx += x;
-//             sumy += y;
-//             sumz += z;
-//             count++;
-//         }
-//     }
-
-// }
 
 void getCoordinatesInv(int i, int dimX, int dimY, int dimZ) {
     int z = floor(i / (dimX * dimY));
@@ -121,7 +95,7 @@ void insertPt(Vector3D *vector, int x, int y, int z) {
     cudaDeviceSynchronize();
 }
 
-__global__ void insertPointCloudKernel(bool *grid, Point *pointcloud, int n, int dimX, int dimY, int dimZ) {
+__global__ void insertPointCloudKernel(bool *grid, Point *pointcloud, int n, int dimX, int dimY, int dimZ, float resolution) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     // check if point is within the pointcloud vector of lenght n
@@ -129,28 +103,32 @@ __global__ void insertPointCloudKernel(bool *grid, Point *pointcloud, int n, int
         if (tid == 0) printf("Length: %d\n", n);
         Point pt = pointcloud[tid];
         // check if point is within bounds (correct coordinates)
-        if (pt.x < dimX && pt.y < dimY && pt.z < dimZ) {
-            int idx = pt.y + pt.x * dimY + pt.z * dimX * dimY;
-            // printf("Adding Point (%d, %d, %d) at idx %d\n", pt.x, pt.y, pt.z, idx);
+        if (pt.x < float(dimX) && pt.y < float(dimY) && pt.z < float(dimZ)) {
+            int x = floor(pt.x / resolution);
+            int y = floor(pt.y / resolution);
+            int z = floor(pt.z / resolution);
+
+            int idx = y + x * dimY + z * dimX * dimY;
+
+            // printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
+            // printf("The point is floored to (%d, %d, %d) and added at idx %d\n", x, y, z, idx);
             grid[idx] = true;
         } else {
             // point out of bound
-            printf("Point (%d, %d, %d) out of bound!\n", pt.x, pt.y, pt.z);
+            printf("Point (%f, %f, %f) out of bound!\n", pt.x, pt.y, pt.z);
         }
     }
 }
 
 // insert a pointcloud (array of points (x,y,z)) in the 3D grid
-void insertPointCloud(Vector3D *vector, Point *pointcloud, int sizePointcloud) {
+void insertPointCloud(Vector3D *vector, Point *pointcloud, int sizePointcloud, float resolution) {
     int numBlocks = (sizePointcloud + 256) / 256;
-    printf("Num blocks: %d\n", numBlocks);
-    printf("Size of grid: %d x %d x %d\n", vector->dimX, vector->dimY, vector->dimZ);
     printf("Size of pointcloud: %d\n", sizePointcloud);
-    insertPointCloudKernel<<<numBlocks, 256>>>(vector->grid, pointcloud, sizePointcloud, vector->dimX, vector->dimY, vector->dimZ);
+    insertPointCloudKernel<<<numBlocks, 256>>>(vector->grid, pointcloud, sizePointcloud, vector->dimX, vector->dimY, vector->dimZ, resolution);
     cudaDeviceSynchronize();
 }
 
-__global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *state, int dimX, int dimY, int dimZ) {
+__global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *state, int dimX, int dimY, int dimZ, float resolution) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < n) {
@@ -160,9 +138,9 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
 
         curand_init(clock(), tid, 0, &state[tid]);
 
-        int x = (int)truncf(curand_uniform(&(state[tid])) * (dimX - 1.0 + 0.999999));
-        int y = (int)truncf(curand_uniform(&(state[tid])) * (dimY - 1.0 + 0.999999));
-        int z = (int)truncf(curand_uniform(&(state[tid])) * (dimZ - 1.0 + 0.999999));
+        float x = curand_uniform(&(state[tid])) * (dimX * resolution - 1.0 + 0.999999);
+        float y = curand_uniform(&(state[tid])) * (dimY * resolution - 1.0 + 0.999999);
+        float z = curand_uniform(&(state[tid])) * (dimZ * resolution - 1.0 + 0.999999);
 
         Point pt;
         pt.x = x;
@@ -172,17 +150,16 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
         if (x >= dimX || y >= dimY || z >= dimZ) {
             printf("***************ERROR, the generated point doesn't have valid coordinates!***************\n");
         } else {
-            // printf("generated point (%d, %d, %d)\n", pt.x, pt.y, pt.z);
+            // printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
         }
 
         pointcloud[tid] = pt;
     }
 }
 
-// generate a (sizePointcloud) amount of points and put them in the pointcloud
-void generateRandomPc(Vector3D *vector, Point *pointcloud, int sizePointcloud, curandState *state) {
+void generateRandomPc(Vector3D *vector, Point *pointcloud, int sizePointcloud, float resolution, curandState *state) {
     int numBlocks = (sizePointcloud + 256) / 256;
-    generateRandomPcKernel<<<numBlocks, 256>>>(pointcloud, sizePointcloud, state, vector->dimX, vector->dimY, vector->dimZ);
+    generateRandomPcKernel<<<numBlocks, 256>>>(pointcloud, sizePointcloud, state, vector->dimX, vector->dimY, vector->dimZ, resolution);
     cudaDeviceSynchronize();
 }
 
@@ -314,7 +291,7 @@ void printGrid(Vector3D *vector) {
 __global__ void printPcKernel(Point *pointcloud, int sizePointcloud) {
     for (int i = 0; i < sizePointcloud; i++) {
         Point pt = pointcloud[i];
-        printf("Point %d: (%d,%d,%d)\n", i, pt.x, pt.y, pt.z);
+        printf("Point %d: (%f,%f,%f)\n", i, pt.x, pt.y, pt.z);
     }
 }
 
@@ -348,16 +325,19 @@ void cubeFace(FILE *file, int nCube) {
 
     face(file, i, i + 6, i + 4);
     face(file, i, i + 2, i + 6);
+
     face(file, i, i + 3, i + 2);
     face(file, i, i + 1, i + 3);
 
     face(file, i + 2, i + 7, i + 6);
     face(file, i + 2, i + 3, i + 7);
+
     face(file, i + 4, i + 6, i + 7);
     face(file, i + 4, i + 7, i + 5);
 
     face(file, i, i + 4, i + 5);
     face(file, i, i + 5, i + 1);
+
     face(file, i + 1, i + 5, i + 7);
     face(file, i + 1, i + 7, i + 3);
 }
@@ -403,9 +383,11 @@ int main() {
     // PARAMETERS
 
     // size of the 3D Matrix
-    int dimX = 200;  // 10cm per unit (20 x 10 x 5 m)
+    int dimX = 200;  // 10cm per unit (20 x 10 x 5 m) (200u x 100u x 50u)
     int dimY = 100;
     int dimZ = 50;
+
+    float resolution = 0.1;  // length of the edges of a cell (in meters)
 
     // number of points to randomly generate for the pointcloud
     int numPointsToGenerate = 100000;
@@ -453,6 +435,9 @@ int main() {
     // initialize 3d grid
     initGrid(h_vector);
 
+    printf("Size of grid (cells): %d x %d x %d\n", h_vector->dimX, h_vector->dimY, h_vector->dimZ);
+    printf("Size of grid: %f m x %f m x %f m\n", h_vector->dimX * resolution, h_vector->dimY * resolution, h_vector->dimZ * resolution);
+
     // check if there are illegal values inside the grid
     checkGrid(h_vector);
 
@@ -463,7 +448,7 @@ int main() {
     printf("cudaMalloc pointcloud error code: %d\n", err);  // 0: ok | not 0: not ok
 
     // fill the pointcloud with n (numPointsToGenerate) random points
-    generateRandomPc(h_vector, d_pointcloud, numPointsToGenerate, d_state);
+    generateRandomPc(h_vector, d_pointcloud, numPointsToGenerate, resolution, d_state);
 
     // // check for duplicates
     // int *d_pointCloudIntIdx;
@@ -475,7 +460,7 @@ int main() {
     // printPc(d_pointcloud, numPointsToGenerate);
 
     // fill the 3d space with the pointcloud points
-    insertPointCloud(h_vector, d_pointcloud, numPointsToGenerate);
+    insertPointCloud(h_vector, d_pointcloud, numPointsToGenerate, resolution);
 
     // check if the grid contains illegal values (e.g. numbers that are not 0 or 1)
     checkGrid(h_vector);
