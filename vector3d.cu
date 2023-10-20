@@ -121,8 +121,8 @@ __global__ void insertPointcloudKernel(bool *d_grid, Point *pointcloud, int n, i
         if (pt.x < float(dimX) && pt.y < float(dimY) && pt.z < float(dimZ)) {
             int idx = y + x * dimY + z * dimX * dimY;
 
-            printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
-            printf("The point is floored to (%d, %d, %d) and added at idx %d\n", x, y, z, idx);
+            // printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
+            // printf("The point is floored to (%d, %d, %d) and added at idx %d\n", x, y, z, idx);
             d_grid[idx] = true;
         } else {
             // point out of bound
@@ -132,10 +132,16 @@ __global__ void insertPointcloudKernel(bool *d_grid, Point *pointcloud, int n, i
 }
 
 // insert a pointcloud (array of points (x,y,z)) in the 3D grid
-void insertPointcloud(Vector3D *h_vector, Point *pointcloud, int sizePointcloud) {
+void insertPointcloud(Vector3D *h_vector, Point *d_pointcloud, int sizePointcloud) {
+    if (sizePointcloud <= 0) {
+        printf("insertPointcloud() ERROR! sizePointcloud is not valid!\n");
+        return;
+    }
+
     int numBlocks = (sizePointcloud + 256) / 256;
     // printf("Size of pointcloud: %d\n", sizePointcloud);
-    insertPointcloudKernel<<<numBlocks, 256>>>(h_vector->d_grid, pointcloud, sizePointcloud, h_vector->dimX, h_vector->dimY, h_vector->dimZ, h_vector->resolution);
+
+    insertPointcloudKernel<<<numBlocks, 256>>>(h_vector->d_grid, d_pointcloud, sizePointcloud, h_vector->dimX, h_vector->dimY, h_vector->dimZ, h_vector->resolution);
     cudaDeviceSynchronize();
 }
 
@@ -346,6 +352,7 @@ __global__ void printPcKernel(Point *pointcloud, int sizePointcloud) {
 
 // print the list of points inside the pointcloud
 void printPointcloud(Point *pointcloud, int sizePointcloud) {
+    printf("\n\nPointcloud Output (DEVICE)\n");
     printPcKernel<<<1, 1>>>(pointcloud, sizePointcloud);
     cudaDeviceSynchronize();
 }
@@ -391,7 +398,7 @@ void cubeFace(FILE *file, int nCube) {
     face(file, i + 1, i + 7, i + 3);
 }
 
-void generateMesh(Vector3D *h_vector, char const *path) {
+void generateMesh(Vector3D *h_vector, const char *path) {
     double dimX = h_vector->dimX;
     double dimY = h_vector->dimY;
     double dimZ = h_vector->dimZ;

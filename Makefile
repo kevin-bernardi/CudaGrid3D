@@ -1,11 +1,15 @@
-general: lib
-	g++ test.cpp -o lib -L./ -lvector
+PROGRAM=vector3d
+SHARED_LIB_NAME=lib$(PROGRAM)
+OUTPUT=test
 
-lib: vector
-	g++ -shared -o libvector.so vector3d.o -L/usr/local/cuda/lib64 -lcuda -lcudart
+$(OUTPUT): $(SHARED_LIB_NAME).so $(PROGRAM).h main.cpp
+	g++ main.cpp -o $(OUTPUT) -L./ -l$(PROGRAM)
+
+$(SHARED_LIB_NAME).so: $(PROGRAM).o
+	g++ -shared -o $(SHARED_LIB_NAME).so $(PROGRAM).o -L/usr/local/cuda/lib64 -lcuda -lcudart
 	
-vector: vector3d.cu
-	nvcc -c -Xcompiler -fPIC vector3d.cu
+$(PROGRAM).o: $(PROGRAM).cu $(PROGRAM).h
+	nvcc -c -Xcompiler -fPIC $(PROGRAM).cu
 
 clean:
-	rm *.o *.out *.so *.obj
+	rm -f $(PROGRAM).o $(SHARED_LIB_NAME).so *.obj $(OUTPUT)
