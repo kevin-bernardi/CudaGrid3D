@@ -26,25 +26,26 @@ the signature of the function calls inside the main()
 
 #include "vector3d.h"
 
-__global__ void initGridKernel(bool *grid, int numCells) {
+__global__ void initGridKernel(bool *d_grid, int numCells) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (tid == numCells - 1) {
-        printf("initializing vector3D in kernel\n");
-    }
+    // if (tid == numCells - 1) {
+    //     printf("initializing vector3D in kernel\n");
+    // }
 
     if (tid < numCells) {
-        grid[tid] = false;
+        d_grid[tid] = false;
     }
 }
 
 // initialize 3d grid, make every cell false
-void initVector(Vector3D *vector, int dimX, int dimY, int dimZ) {
-    vector->dimX = dimX;
-    vector->dimY = dimY;
-    vector->dimZ = dimZ;
+void initVector(Vector3D *h_vector, int dimX, int dimY, int dimZ, float resolution) {
+    h_vector->dimX = dimX;
+    h_vector->dimY = dimY;
+    h_vector->dimZ = dimZ;
+    h_vector->resolution = resolution;
 
-    int numCells = vector->dimX * vector->dimY * vector->dimZ;
+    int numCells = h_vector->dimX * h_vector->dimY * h_vector->dimZ;
     int numBlocks = (numCells + 256) / 256;
 
     // grid on the device (GPU)
@@ -53,26 +54,50 @@ void initVector(Vector3D *vector, int dimX, int dimY, int dimZ) {
     // allocate the grid on the device (GPU)
     cudaMalloc((void **)&d_grid, numCells * sizeof(bool));
 
-    vector->grid = d_grid;
+    h_vector->d_grid = d_grid;
 
-    initGridKernel<<<numBlocks, 256>>>(vector->grid, numCells);
+    initGridKernel<<<numBlocks, 256>>>(h_vector->d_grid, numCells);
     cudaDeviceSynchronize();
 }
 
-void getCoordinatesInv(int i, int dimX, int dimY, int dimZ) {
-    int z = floor(i / (dimX * dimY));
+// free vector space
+void freeVector(Vector3D *h_vector) {
+    cudaFree(h_vector->d_grid);
+    free(h_vector);
+}
 
-    int x = floor((i - (z * dimX * dimY)) / dimY);
+void getCoordinatesInv(Vector3D *h_vector, int index, int **result) {
+    *result = (int *)malloc(sizeof(int) * 3);
 
-    int y = i - (x * dimY + z * dimX * dimY);
+    int dimX = h_vector->dimX;
+    int dimY = h_vector->dimY;
+    int dimZ = h_vector->dimZ;
 
-    printf("Idx %d -> (%d, %d, %d)\n", i, x, y, z);
+    if (index >= dimX * dimY * dimZ) {
+        printf("getCoordinatesInv() ERROR! Index out of bounds!\n");
+        (*result)[0] = -1;
+        (*result)[1] = -1;
+        (*result)[2] = -1;
+        return;
+    }
+
+    int z = floor(index / (dimX * dimY));
+
+    int x = floor((index - (z * dimX * dimY)) / dimY);
+
+    int y = index - (x * dimY + z * dimX * dimY);
+
+    (*result)[0] = x;
+    (*result)[1] = y;
+    (*result)[2] = z;
+
+    return;
 }
 
 // input 3 coordinates (x,y,z) and get the linear index
-int getLinearIndex(Vector3D *vector, int x, int y, int z) {
-    if (x < vector->dimX && y < vector->dimY && z < vector->dimZ) {
-        int result = y + x * vector->dimY + z * vector->dimX * vector->dimY;
+int getLinearIndex(Vector3D *h_vector, int x, int y, int z) {
+    if (x < h_vector->dimX && y < h_vector->dimY && z < h_vector->dimZ) {
+        int result = y + x * h_vector->dimY + z * h_vector->dimX * h_vector->dimY;
         return result;
 
     } else {
@@ -81,24 +106,24 @@ int getLinearIndex(Vector3D *vector, int x, int y, int z) {
     }
 }
 
-__global__ void insertPointCloudKernel(bool *grid, Point *pointcloud, int n, int dimX, int dimY, int dimZ, float resolution) {
+__global__ void insertPointcloudKernel(bool *d_grid, Point *pointcloud, int n, int dimX, int dimY, int dimZ, float resolution) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     // check if point is within the pointcloud vector of lenght n
     if (tid < n) {
-        if (tid == 0) printf("Length: %d\n", n);
         Point pt = pointcloud[tid];
         // check if point is within bounds (correct coordinates)
-        if (pt.x < float(dimX) && pt.y < float(dimY) && pt.z < float(dimZ)) {
-            int x = floor(pt.x / resolution);
-            int y = floor(pt.y / resolution);
-            int z = floor(pt.z / resolution);
 
+        int x = floor(pt.x / resolution);
+        int y = floor(pt.y / resolution);
+        int z = floor(pt.z / resolution);
+
+        if (pt.x < float(dimX) && pt.y < float(dimY) && pt.z < float(dimZ)) {
             int idx = y + x * dimY + z * dimX * dimY;
 
-            // printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
-            // printf("The point is floored to (%d, %d, %d) and added at idx %d\n", x, y, z, idx);
-            grid[idx] = true;
+            printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
+            printf("The point is floored to (%d, %d, %d) and added at idx %d\n", x, y, z, idx);
+            d_grid[idx] = true;
         } else {
             // point out of bound
             printf("Point (%f, %f, %f) out of bound!\n", pt.x, pt.y, pt.z);
@@ -107,15 +132,25 @@ __global__ void insertPointCloudKernel(bool *grid, Point *pointcloud, int n, int
 }
 
 // insert a pointcloud (array of points (x,y,z)) in the 3D grid
-void insertPointCloud(Vector3D *vector, Point *pointcloud, int sizePointcloud, float resolution) {
+void insertPointcloud(Vector3D *h_vector, Point *pointcloud, int sizePointcloud) {
     int numBlocks = (sizePointcloud + 256) / 256;
-    printf("Size of pointcloud: %d\n", sizePointcloud);
-    insertPointCloudKernel<<<numBlocks, 256>>>(vector->grid, pointcloud, sizePointcloud, vector->dimX, vector->dimY, vector->dimZ, resolution);
+    // printf("Size of pointcloud: %d\n", sizePointcloud);
+    insertPointcloudKernel<<<numBlocks, 256>>>(h_vector->d_grid, pointcloud, sizePointcloud, h_vector->dimX, h_vector->dimY, h_vector->dimZ, h_vector->resolution);
     cudaDeviceSynchronize();
 }
 
-void initPointcloud(Point *d_pointcloud, int length) {
-    cudaMalloc((void **)&d_pointcloud, sizeof(Point) * length);
+void initDevicePointcloud(Point **d_pointcloud, int length) {
+    cudaMalloc((void **)d_pointcloud, sizeof(Point) * length);
+}
+
+void initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int length) {
+    cudaMalloc((void **)d_pointcloud, sizeof(Point) * length);
+
+    cudaMemcpy(*d_pointcloud, h_pointcloud, sizeof(Point) * length, cudaMemcpyHostToDevice);
+}
+
+void freeDevicePointcloud(Point *d_pointcloud) {
+    cudaFree(d_pointcloud);
 }
 
 __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *state, int dimX, int dimY, int dimZ, float resolution) {
@@ -123,7 +158,7 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
 
     if (tid < n) {
         if (tid == n - 1) {
-            printf("generating random pointcloud in kernel\n");
+            printf("Generating random pointcloud in kernel\n");
         }
 
         curand_init(clock(), tid, 0, &state[tid]);
@@ -140,51 +175,55 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
         if (x >= dimX || y >= dimY || z >= dimZ) {
             printf("***************ERROR, the generated point doesn't have valid coordinates!***************\n");
         } else {
-            printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
+            // printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
             pointcloud[tid] = pt;
         }
     }
 }
 
-void generateRandomPc(Vector3D *vector, Point *pointcloud, int sizePointcloud, float resolution, curandState *state) {
+void generateRandomPointcloud(Vector3D *h_vector, Point *pointcloud, int sizePointcloud) {
     int numBlocks = (sizePointcloud + 256) / 256;
-    generateRandomPcKernel<<<numBlocks, 256>>>(pointcloud, sizePointcloud, state, vector->dimX, vector->dimY, vector->dimZ, resolution);
-    cudaDeviceSynchronize();
-}
 
-void generateRandomPc(Vector3D *vector, Point *pointcloud, int sizePointcloud, float resolution) {
     // state for the generation of random numbers in kernel code
     curandState *d_state;
 
     // allocate the space for state on the gpu
     cudaMalloc((void **)&d_state, sizeof(curandState) * sizePointcloud);
 
-    generateRandomPc(vector, pointcloud, sizePointcloud, resolution, d_state);
+    generateRandomPcKernel<<<numBlocks, 256>>>(pointcloud, sizePointcloud, d_state, h_vector->dimX, h_vector->dimY, h_vector->dimZ, h_vector->resolution);
+
+    cudaFree(d_state);
+
+    cudaDeviceSynchronize();
 }
 
-__global__ void checkGridKernel(bool *grid, int numCells) {
+__global__ void checkGridKernel(bool *d_grid, int numCells) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < numCells) {
         if (tid == numCells - 1) printf("checking grid in kernel\n");
-        if (grid[tid] != true && grid[tid] != false) {
+        if (d_grid[tid] != true && d_grid[tid] != false) {
             printf("Check Failed  ");
         }
     }
 }
 
 // check if the 3D grid contains illegal values
-void checkGrid(Vector3D *vector) {
-    int numCells = vector->dimX * vector->dimY * vector->dimZ;
+void checkGrid(Vector3D *h_vector) {
+    int numCells = h_vector->dimX * h_vector->dimY * h_vector->dimZ;
     int numBlocks = (numCells + 256) / 256;
-    checkGridKernel<<<numBlocks, 256>>>(vector->grid, numCells);
+    checkGridKernel<<<numBlocks, 256>>>(h_vector->d_grid, numCells);
     cudaDeviceSynchronize();
 }
 
-__global__ void checkDuplicatesKernel(Point *pointcloud, int *pointcloudIntIdx, int numPoints, int dimX, int dimY, int dimZ) {
+__global__ void checkDuplicatesKernel(Point *pointcloud, int *pointcloudIntIdx, int numPoints, int dimX, int dimY, int dimZ, float resolution) {
     for (int i = 0; i < numPoints; i++) {
         Point pt = pointcloud[i];
-        int idx = pt.y + pt.x * dimY + pt.z * dimX * dimY;
+        int x = floor(pt.x / resolution);
+        int y = floor(pt.y / resolution);
+        int z = floor(pt.z / resolution);
+
+        int idx = y + x * dimY + z * dimX * dimY;
 
         pointcloudIntIdx[i] = idx;
     }
@@ -194,7 +233,7 @@ __global__ void checkDuplicatesKernel(Point *pointcloud, int *pointcloudIntIdx, 
     for (int i = 0; i < numPoints - 1; i++) {
         for (int j = i + 1; j < numPoints; j++) {
             if (pointcloudIntIdx[j] == pointcloudIntIdx[i]) {
-                printf("Found duplicate! Point idx %d\n", pointcloudIntIdx[j]);
+                // printf("Found duplicate! Point idx %d\n", pointcloudIntIdx[j]);
                 duplicates = true;
             }
         }
@@ -208,13 +247,13 @@ __global__ void checkDuplicatesKernel(Point *pointcloud, int *pointcloudIntIdx, 
 }
 
 // check if there are duplicate points in the pointcloud (points with the same x,y,z coordinates)
-void checkDuplicates(Vector3D *vector, Point *pointcloud, int *pointcloudIntIdx, int sizePointcloud) {
-    checkDuplicatesKernel<<<1, 1>>>(pointcloud, pointcloudIntIdx, sizePointcloud, vector->dimX, vector->dimY, vector->dimZ);
-    cudaDeviceSynchronize();
-}
+void checkDuplicates(Vector3D *h_vector, Point *pointcloud, int sizePointcloud) {
+    int *d_pointcloudIntIdx;
 
-void copyPCToHost(Point *h_pc, Point *d_pc, int length) {
-    cudaMemcpy(h_pc, d_pc, sizeof(Point) * length, cudaMemcpyDeviceToHost);
+    cudaMalloc((void **)&d_pointcloudIntIdx, sizeof(int) * sizePointcloud);
+    checkDuplicatesKernel<<<1, 1>>>(pointcloud, d_pointcloudIntIdx, sizePointcloud, h_vector->dimX, h_vector->dimY, h_vector->dimZ, h_vector->resolution);
+    cudaDeviceSynchronize();
+    cudaFree(d_pointcloudIntIdx);
 }
 
 // same as printGrid but for grids allocated on the host
@@ -244,28 +283,35 @@ void printGridHost(bool *h_grid, int dimx, int dimy, int dimz) {
     }
 }
 
-__global__ void printLinearGridKernel(bool *grid, int numCells) {
+__global__ void printLinearGridKernel(bool *d_grid, int numCells) {
+    printf("\n\nLinear Matrix Output (DEVICE)\n");
+
     for (int i = 0; i < numCells; i++) {
-        printf("%d | ", grid[i]);
+        printf("%d | ", d_grid[i]);
     }
 
     printf("\n");
 }
 
 // print the grid on a line (as it really is in the memory)
-void printLinearGrid(Vector3D *vector) {
-    int numCells = vector->dimX * vector->dimY * vector->dimZ;
-    printLinearGridKernel<<<1, 1>>>(vector->grid, numCells);
+void printLinearGrid(Vector3D *h_vector) {
+    int numCells = h_vector->dimX * h_vector->dimY * h_vector->dimZ;
+
+    if (numCells <= 0) {
+        printf("Invalid Vector Size! (num. cells: %d)\n", numCells);
+    }
+
+    printLinearGridKernel<<<1, 1>>>(h_vector->d_grid, numCells);
     cudaDeviceSynchronize();
 }
 
-__global__ void printGridKernel(bool *grid, int dimX, int dimY, int dimZ) {
+__global__ void printGridKernel(bool *d_grid, int dimX, int dimY, int dimZ) {
     if (dimX * dimY * dimZ <= 0) {
         printf("ERROR! Empty matrix\n");
         return;
     }
 
-    printf("\n\n3D Matrix Output (KERNEL)\n");
+    printf("\n\n3D Matrix Output (DEVICE)\n");
 
     for (int z = 0; z < dimZ; z++) {
         printf("Layer %d\n", z);
@@ -274,9 +320,9 @@ __global__ void printGridKernel(bool *grid, int dimX, int dimY, int dimZ) {
                 int idx = y + x * dimY + z * dimX * dimY;
 
                 if (y == dimY - 1) {
-                    printf("%d", grid[idx]);
+                    printf("%d", d_grid[idx]);
                 } else {
-                    printf("%d | ", grid[idx]);
+                    printf("%d | ", d_grid[idx]);
                 }
             }
 
@@ -286,8 +332,8 @@ __global__ void printGridKernel(bool *grid, int dimX, int dimY, int dimZ) {
 }
 
 // print the grid in many 2D planes (dimZ 2D planes of size dimX x dimY)
-void printGrid(Vector3D *vector) {
-    printGridKernel<<<1, 1>>>(vector->grid, vector->dimX, vector->dimY, vector->dimZ);
+void printGrid(Vector3D *h_vector) {
+    printGridKernel<<<1, 1>>>(h_vector->d_grid, h_vector->dimX, h_vector->dimY, h_vector->dimZ);
     cudaDeviceSynchronize();
 }
 
@@ -345,23 +391,26 @@ void cubeFace(FILE *file, int nCube) {
     face(file, i + 1, i + 7, i + 3);
 }
 
-void generateMesh(Vector3D *vector) {
-    double dimX = vector->dimX;
-    double dimY = vector->dimY;
-    double dimZ = vector->dimZ;
-
-    double resolution = 0.1;
+void generateMesh(Vector3D *h_vector, char const *path) {
+    double dimX = h_vector->dimX;
+    double dimY = h_vector->dimY;
+    double dimZ = h_vector->dimZ;
+    double resolution = h_vector->resolution;
 
     int numCells = dimX * dimY * dimZ;
 
+    bool *h_grid = (bool *)malloc(sizeof(bool) * numCells);
+
+    cudaMemcpy(h_grid, h_vector->d_grid, sizeof(bool) * numCells, cudaMemcpyDeviceToHost);
+
     FILE *fptr;
 
-    fptr = fopen("example.obj", "w");
+    fptr = fopen(path, "w");
 
     int nCube = 0;
 
     for (int i = 0; i < numCells; i++) {
-        if (vector->grid[i] == true) {
+        if (h_grid[i] == true) {
             double z = floor(i / (dimX * dimY));
 
             double x = floor((i - (z * dimX * dimY)) / dimY);
@@ -373,16 +422,18 @@ void generateMesh(Vector3D *vector) {
     }
 
     for (int i = 0; i < numCells; i++) {
-        if (vector->grid[i] == true) {
+        if (h_grid[i] == true) {
             cubeFace(fptr, nCube);
             nCube++;
         }
     }
 
     fclose(fptr);
+
+    free(h_grid);
 }
 
-int test(int dimx, int dimy, int dimz, float res, int numPoints, bool memoryDebug) {
+int test(int dimx, int dimy, int dimz, float res, int numPoints) {
     // PARAMETERS
 
     bool enableCheckDuplicates = false;
@@ -400,15 +451,6 @@ int test(int dimx, int dimy, int dimz, float res, int numPoints, bool memoryDebu
     // END PARAMETERS
     // ---------------------------------------------------------------------------------
 
-    // state for the generation of random numbers in kernel code
-    curandState *d_state;
-
-    // allocate the space for state on the gpu
-    cudaError_t err = cudaMalloc((void **)&d_state, sizeof(curandState) * numPointsToGenerate);
-
-    if (memoryDebug)
-        printf("cudaMalloc curandState error code: %d\n", err);  // 0: ok | not 0: not ok
-
     // number of cells contained in the 3D matrix
     int numCells = dimX * dimY * dimZ;
 
@@ -421,27 +463,11 @@ int test(int dimx, int dimy, int dimz, float res, int numPoints, bool memoryDebu
     // grid (or matrix) on the host
     bool *h_grid = (bool *)malloc(sizeof(bool) * numCells);
 
-    // grid on the device (GPU)
-    // bool *d_grid;
-
-    // // allocate the grid on the device (GPU)
-    // err = cudaMalloc((void **)&d_grid, numCells * sizeof(bool));
-
-    // if (memoryDebug)
-    //     printf("cudaMalloc grid error code: %d\n", err);  // 0: ok | not 0: not ok
-
-    // initialize vector
-    // h_vector->dimX = dimX;
-    // h_vector->dimY = dimY;
-    // h_vector->dimZ = dimZ;
-
-    // h_vector->grid = d_grid;
-
     // start timer
     gettimeofday(&start, NULL);
 
     // initialize 3d grid
-    initVector(h_vector, dimX, dimY, dimZ);
+    initVector(h_vector, dimX, dimY, dimZ, resolution);
 
     printf("Size of grid (cells): %d x %d x %d\n", h_vector->dimX, h_vector->dimY, h_vector->dimZ);
     printf("Size of grid: %f m x %f m x %f m\n", h_vector->dimX * resolution, h_vector->dimY * resolution, h_vector->dimZ * resolution);
@@ -452,52 +478,30 @@ int test(int dimx, int dimy, int dimz, float res, int numPoints, bool memoryDebu
     // allocate pointcloud on device
     Point *d_pointcloud;
 
-    // err =
-    cudaMalloc((void **)&d_pointcloud, sizeof(Point) * numPointsToGenerate);
-
-    // if (memoryDebug)
-    //     printf("cudaMalloc pointcloud error code: %d\n", err);  // 0: ok | not 0: not ok
-
-    // initPointcloud(d_pointcloud, numPointsToGenerate);
+    initDevicePointcloud(&d_pointcloud, numPointsToGenerate);
 
     // fill the pointcloud with n (numPointsToGenerate) random points
-    generateRandomPc(h_vector, d_pointcloud, numPointsToGenerate, resolution);
+    generateRandomPointcloud(h_vector, d_pointcloud, numPointsToGenerate);
 
     Point *h_pointcloud = (Point *)malloc(sizeof(Point) * numPointsToGenerate);
 
-    // copyPCToHost(h_pointcloud, d_pointcloud, numPointsToGenerate);
-
-    // for (int i = 0; i < numPointsToGenerate; i++) {
-    //     printf("HOST POINTCLOUD\n");
-    //     Point pt = h_pointcloud[i];
-    //     printf("Point %d: (%f,%f,%f)\n", i, pt.x, pt.y, pt.z);
-    // }
-
     // check for duplicates
-
-    int *d_pointCloudIntIdx;
     if (enableCheckDuplicates) {
-        err = cudaMalloc((void **)&d_pointCloudIntIdx, sizeof(int) * numPointsToGenerate);
-        printf("cudaMalloc pointCloudIntIdx error code: %d\n", err);  // 0: ok | not 0: not ok
-        checkDuplicates(h_vector, d_pointcloud, d_pointCloudIntIdx, numPointsToGenerate);
+        checkDuplicates(h_vector, d_pointcloud, numPointsToGenerate);
     }
 
     // // print the list of points in the pointcloud
     printPointcloud(d_pointcloud, numPointsToGenerate);
 
     // fill the 3d space with the pointcloud points
-    insertPointCloud(h_vector, d_pointcloud, numPointsToGenerate, resolution);
+    insertPointcloud(h_vector, d_pointcloud, numPointsToGenerate);
 
     // check if the grid contains illegal values (e.g. numbers that are not 0 or 1)
     checkGrid(h_vector);
 
     printGrid(h_vector);
 
-    cudaMemcpy(h_grid, h_vector->grid, sizeof(bool) * numCells, cudaMemcpyDeviceToHost);
-
-    h_vector->grid = h_grid;
-
-    generateMesh(h_vector);
+    generateMesh(h_vector, "test.obj");
 
     // stop the timer
     gettimeofday(&end, NULL);
@@ -505,14 +509,12 @@ int test(int dimx, int dimy, int dimz, float res, int numPoints, bool memoryDebu
     // calculate the computation time
     printf("computation took %f ms\n", ((end.tv_sec - start.tv_sec) * 1000000 + end.tv_usec - start.tv_usec) / 1000.0);
 
-    // free gpu memory
-    cudaFree(d_pointcloud);
-    // cudaFree(d_pointCloudIntIdx);
-    cudaFree(d_state);
+    freeDevicePointcloud(d_pointcloud);
+    freeVector(h_vector);
 
     // free heap memory
     free(h_grid);
-    free(h_vector);
+    free(h_pointcloud);
 
     return 0;
 }
