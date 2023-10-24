@@ -24,6 +24,8 @@ the signature of the function calls inside the main()
 #include <sys/time.h>
 #include <time.h>
 
+#include <opencv2/core/cuda.hpp>
+
 #include "vector3d.h"
 
 __global__ void initGridKernel(bool *d_grid, int numCells) {
@@ -438,6 +440,53 @@ void generateMesh(Vector3D *h_vector, const char *path) {
     fclose(fptr);
 
     free(h_grid);
+}
+
+__global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int length) {
+    int tid = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+
+    if (tid < length) {
+        float x, y, z;
+
+        x = d_arr[tid];
+        y = d_arr[tid + 1];
+        z = d_arr[tid + 2];
+
+        Point pt;
+        pt.x = x;
+        pt.y = y;
+        pt.z = z;
+
+        d_pointcloud[tid / 4] = pt;
+    }
+}
+
+void insertCvMatToPointcloud(cv::Mat *h_cv_mat, Point **d_pointcloud, Transform3D tf) {
+    // convert cv::Mat to classic C array
+    float *mat_arr = h_cv_mat->isContinuous() ? (float *)h_cv_mat->data : (float *)h_cv_mat->clone().data;
+    uint length = h_cv_mat->total() * h_cv_mat->channels();
+
+    printf("Converted array size: %d\n", length);
+
+    for (int i = 0; i < length; i++) {
+        printf("%f |", mat_arr[i]);
+    }
+    printf("\n");
+
+    float *d_arr;
+
+    cudaMalloc(&d_arr, sizeof(float) * length);
+    cudaMemcpy(d_arr, mat_arr, sizeof(float) * length, cudaMemcpyHostToDevice);
+
+    int numPoints = length / 4;
+
+    cudaMalloc(d_pointcloud, sizeof(Point) * numPoints);
+
+    initDevicePointcloud(d_pointcloud, numPoints);
+
+    int numBlocks = (numPoints + 256) / 256;
+
+    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_arr, length);
 }
 
 int test(int dimx, int dimy, int dimz, float res, int numPoints) {

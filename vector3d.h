@@ -1,6 +1,10 @@
 #ifndef VECTOR3D_H
 #define VECTOR3D_H
 
+#include <opencv2/core/mat.hpp>
+
+#include "star/robotics/math/Transform3D.hpp"
+
 class Vector3D {
    public:
     bool *d_grid;
@@ -56,6 +60,9 @@ void checkGrid(Vector3D *h_vector);
 
 // checks if there are duplicates in the pointcloud (points with the same x,y,z coordinates)
 void checkDuplicates(Vector3D *h_vector, Point *d_pointcloud, int sizePointcloud);
+
+// opencv compatibility
+void insertCvMatToPointcloud(cv::Mat *h_cv_mat, Point **d_pointcloud, Transform3D tf);
 
 // print functions
 void printGridHost(bool *h_grid, int dimx, int dimy, int dimz);

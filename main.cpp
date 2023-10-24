@@ -1,6 +1,7 @@
 #include <sys/time.h>
 
 #include <iostream>
+#include <opencv2/core/mat.hpp>
 
 #include "vector3d.h"
 
@@ -28,37 +29,30 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Esecuzione Vector3D da file cpp" << std::endl;
 
-    struct timeval t1, t2, t1_mesh, t2_mesh;
-
-    gettimeofday(&t1, nullptr);
-
-    Vector3D* vector = new Vector3D;
-
     Point* d_pointcloud;
 
-    initVector(vector, dimX, dimY, dimZ, resolution);
+    Transform3D tf;
 
-    initDevicePointcloud(&d_pointcloud, numPoints);
+    tf.setTranslation(1, 1, 1);
+    tf.setRPY(0, 0, 0);
 
-    generateRandomPointcloud(vector, d_pointcloud, numPoints);
+    cv::Mat mat = cv::Mat::zeros(20, 20, CV_32FC4);
+    mat.at<cv::Vec4f>(0, 0) = cv::Vec4f(1.1, 1.1111, 2.0, 3.0);
+    mat.at<cv::Vec4f>(1, 1) = cv::Vec4f(1.6, 1.3248, 2.0, 3.332132);
+    mat.at<cv::Vec4f>(5, 1) = cv::Vec4f(1.6, 1.3248, 2.0, 3.332132);
+    mat.at<cv::Vec4f>(1, 5) = cv::Vec4f(1.6, 1.3248, 2.0, 3.332132);
 
-    insertPointcloud(vector, d_pointcloud, numPoints);
+    std::cout << std::endl;
 
-    gettimeofday(&t2, nullptr);
+    // initDevicePointcloud(&d_pointcloud, numPoints);
 
-    float diff = getTimeDifference(t1, t2);
+    insertCvMatToPointcloud(&mat, &d_pointcloud, tf);
 
-    std::cout << "Generated the grid in : " << diff << " ms" << std::endl;
+    int matCells = mat.rows * mat.cols;
 
-    // gettimeofday(&t1_mesh, nullptr);
-    // generateMesh(vector, "./mesh.obj");
-    // gettimeofday(&t2_mesh, nullptr);
+    printPointcloud(d_pointcloud, matCells);
 
-    // diff = getTimeDifference(t1_mesh, t2_mesh);
-    // std::cout << "Generated the mesh in : " << diff << " ms" << std::endl;
+    // float diff = getTimeDifference(t1, t2);
 
-    // free allocated memory
-
-    freeVector(vector);
-    freeDevicePointcloud(d_pointcloud);
+    // std::cout << "Computed test.cpp in : " << diff << " ms" << std::endl;
 }
