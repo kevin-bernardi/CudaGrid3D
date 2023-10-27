@@ -24,8 +24,6 @@ the signature of the function calls inside the main()
 #include <sys/time.h>
 #include <time.h>
 
-#include <opencv2/core/cuda.hpp>
-
 #include "vector3d.h"
 
 __global__ void initGridKernel(bool *d_grid, int numCells) {
@@ -442,7 +440,7 @@ void generateMesh(Vector3D *h_vector, const char *path) {
     free(h_grid);
 }
 
-__global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int length) {
+__global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int length, CudaTransform3D tf) {
     int tid = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
 
     if (tid < length) {
@@ -452,41 +450,40 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
         y = d_arr[tid + 1];
         z = d_arr[tid + 2];
 
-        Point pt;
-        pt.x = x;
-        pt.y = y;
-        pt.z = z;
+        if (!isnan(x) && !isnan(y) && !isnan(z)) {
+            Point point;
 
-        d_pointcloud[tid / 4] = pt;
+            point.x = x;
+            point.y = y;
+            point.z = z;
+
+            Point res;
+
+            res.x = tf.tra[0] + tf.rot[0][0] * point.x + tf.rot[0][1] * point.y + tf.rot[0][2] * point.z;
+            res.y = tf.tra[1] + tf.rot[1][0] * point.x + tf.rot[1][1] * point.y + tf.rot[1][2] * point.z;
+            res.z = tf.tra[2] + tf.rot[2][0] * point.x + tf.rot[2][1] * point.y + tf.rot[2][2] * point.z;
+
+            // printf("rt_point in kernel: %f, %f, %f\n", res.x, res.y, res.z);
+
+            d_pointcloud[tid / 4] = res;
+        }
     }
 }
 
-void insertCvMatToPointcloud(cv::Mat *h_cv_mat, Point **d_pointcloud, Transform3D tf) {
-    // convert cv::Mat to classic C array
-    float *mat_arr = h_cv_mat->isContinuous() ? (float *)h_cv_mat->data : (float *)h_cv_mat->clone().data;
-    uint length = h_cv_mat->total() * h_cv_mat->channels();
-
-    printf("Converted array size: %d\n", length);
-
-    for (int i = 0; i < length; i++) {
-        printf("%f |", mat_arr[i]);
-    }
-    printf("\n");
-
+void insertCvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTransform3D tf) {
     float *d_arr;
 
     cudaMalloc(&d_arr, sizeof(float) * length);
-    cudaMemcpy(d_arr, mat_arr, sizeof(float) * length, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_arr, h_array, sizeof(float) * length, cudaMemcpyHostToDevice);
 
     int numPoints = length / 4;
-
-    cudaMalloc(d_pointcloud, sizeof(Point) * numPoints);
 
     initDevicePointcloud(d_pointcloud, numPoints);
 
     int numBlocks = (numPoints + 256) / 256;
 
-    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_arr, length);
+    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_arr, length, tf);
+    // cudaDeviceSynchronize();
 }
 
 int test(int dimx, int dimy, int dimz, float res, int numPoints) {

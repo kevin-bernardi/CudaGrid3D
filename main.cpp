@@ -10,7 +10,7 @@ float getTimeDifference(timeval t1, timeval t2) {
     return diff;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     int dimX = 100000;  // units
     int dimY = 100000;
     int dimZ = 100000;
@@ -29,24 +29,43 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Esecuzione Vector3D da file cpp" << std::endl;
 
-    Point* d_pointcloud;
+    Point *d_pointcloud;
 
-    Transform3D tf;
+    CudaTransform3D tf;
 
-    tf.setTranslation(1, 1, 1);
-    tf.setRPY(0, 0, 0);
+    // tf intiialization
+    tf.tra[0] = 1;
+    tf.tra[1] = 2;
+    tf.tra[2] = 3;
 
-    cv::Mat mat = cv::Mat::zeros(20, 20, CV_32FC4);
+    tf.rot[0][1] = 0.0;
+    tf.rot[0][0] = 1.0;
+    tf.rot[0][2] = 0.0;
+    tf.rot[1][0] = 0.0;
+    tf.rot[1][1] = 1.0;
+    tf.rot[1][2] = 0.0;
+    tf.rot[2][0] = 0.0;
+    tf.rot[2][1] = 0.0;
+    tf.rot[2][2] = 1.0;
+
+    cv::Mat mat = cv::Mat::zeros(2, 2, CV_32FC4);
     mat.at<cv::Vec4f>(0, 0) = cv::Vec4f(1.1, 1.1111, 2.0, 3.0);
     mat.at<cv::Vec4f>(1, 1) = cv::Vec4f(1.6, 1.3248, 2.0, 3.332132);
-    mat.at<cv::Vec4f>(5, 1) = cv::Vec4f(1.6, 1.3248, 2.0, 3.332132);
-    mat.at<cv::Vec4f>(1, 5) = cv::Vec4f(1.6, 1.3248, 2.0, 3.332132);
 
     std::cout << std::endl;
 
-    // initDevicePointcloud(&d_pointcloud, numPoints);
+    // convert cv::Mat to classic C array
+    float *mat_arr = mat.isContinuous() ? (float *)mat.data : (float *)mat.clone().data;
+    uint length = mat.total() * mat.channels();
 
-    insertCvMatToPointcloud(&mat, &d_pointcloud, tf);
+    printf("Converted array size: %d\n", length);
+
+    for (int i = 0; i < length; i++) {
+        printf("%f |", mat_arr[i]);
+    }
+    printf("\n");
+
+    insertCvMatToPointcloud(mat_arr, length, &d_pointcloud, tf);
 
     int matCells = mat.rows * mat.cols;
 
