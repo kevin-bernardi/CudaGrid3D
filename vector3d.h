@@ -83,6 +83,7 @@ void face(FILE *file, int v1, int v2, int v3);
 void cubeVertex(FILE *file, double res, double x, double y, double z);
 void cubeFace(FILE *file, int nCube);
 void generateMesh(Vector3D *h_vector, const char *path);
+void generateSimpleMesh(Vector3D *h_vector, const char *path);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
 int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);

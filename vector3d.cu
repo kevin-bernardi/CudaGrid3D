@@ -57,7 +57,7 @@ void initVector(Vector3D *h_vector, int dimX, int dimY, int dimZ, float resoluti
     h_vector->d_grid = d_grid;
 
     initGridKernel<<<numBlocks, 256>>>(h_vector->d_grid, numCells);
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 // free vector space
@@ -114,11 +114,40 @@ __global__ void insertPointcloudKernel(bool *d_grid, Point *pointcloud, int n, i
         Point pt = pointcloud[tid];
         // check if point is within bounds (correct coordinates)
 
-        int x = floor(pt.x / resolution);
-        int y = floor(pt.y / resolution);
-        int z = floor(pt.z / resolution);
+        float numCellRawX = pt.x / resolution;
+        float numCellRawY = pt.y / resolution;
+        float numCellRawZ = pt.z / resolution;
 
-        if (pt.x < float(dimX) && pt.y < float(dimY) && pt.z < float(dimZ)) {
+        int x, y, z;
+
+        if (numCellRawX >= 0) {
+            x = floor(numCellRawX);
+        } else {
+            x = ceil(numCellRawX);
+        }
+
+        if (numCellRawY >= 0) {
+            y = floor(numCellRawY);
+        } else {
+            y = ceil(numCellRawY);
+        }
+
+        if (numCellRawZ >= 0) {
+            z = floor(numCellRawZ);
+        } else {
+            z = ceil(numCellRawZ);
+        }
+
+        x += (dimX / 2);
+        y += (dimY / 2);
+
+        // int x = floor(pt.x / resolution) + (dimX / 2);
+        // int y = floor(pt.y / resolution) + (dimY / 2);
+        // int z = floor(pt.z / resolution);
+
+        // printf("Floored point (%f, %f, %f): %d, %d, %d\n", pt.x, pt.y, pt.z, x, y, z);
+
+        if (x < dimX && y < dimY && z < dimZ && x >= 0 && y >= 0 && z >= 0) {
             int idx = y + x * dimY + z * dimX * dimY;
 
             // printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
@@ -126,7 +155,7 @@ __global__ void insertPointcloudKernel(bool *d_grid, Point *pointcloud, int n, i
             d_grid[idx] = true;
         } else {
             // point out of bound
-            printf("Point (%f, %f, %f) out of bound!\n", pt.x, pt.y, pt.z);
+            // printf("Point (%d, %d, %d) out of bound!\n", x, y, z);
         }
     }
 }
@@ -162,6 +191,10 @@ void freeDevicePointcloud(Point *d_pointcloud) {
 __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *state, int dimX, int dimY, int dimZ, float resolution) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
+    float dimX_meters = dimX * resolution;
+    float dimY_meters = dimY * resolution;
+    float dimZ_meters = dimZ * resolution;
+
     if (tid < n) {
         if (tid == n - 1) {
             printf("Generating random pointcloud in kernel\n");
@@ -169,16 +202,16 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
 
         curand_init(clock(), tid, 0, &state[tid]);
 
-        float x = curand_uniform(&(state[tid])) * (dimX * resolution - 1.0 + 0.999999);
-        float y = curand_uniform(&(state[tid])) * (dimY * resolution - 1.0 + 0.999999);
-        float z = curand_uniform(&(state[tid])) * (dimZ * resolution - 1.0 + 0.999999);
+        float x = (curand_uniform(&(state[tid])) * dimX_meters) - (dimX_meters / 2);
+        float y = (curand_uniform(&(state[tid])) * dimY_meters) - (dimY_meters / 2);
+        float z = (curand_uniform(&(state[tid])) * dimZ_meters);
 
         Point pt;
         pt.x = x;
         pt.y = y;
         pt.z = z;
 
-        if (x >= dimX || y >= dimY || z >= dimZ) {
+        if (x >= dimX_meters / 2 || y >= dimY_meters / 2 || z >= dimZ_meters || x <= -dimX_meters / 2 || y <= -dimY_meters / 2 || z <= 0) {
             printf("***************ERROR, the generated point doesn't have valid coordinates!***************\n");
         } else {
             // printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
@@ -424,7 +457,11 @@ void generateMesh(Vector3D *h_vector, const char *path) {
 
             double y = i - (x * dimY + z * dimX * dimY);
 
-            cubeVertex(fptr, resolution, x * resolution, y * resolution, z * resolution);
+            x = (x * resolution) - (dimX * resolution / 2);
+            y = (y * resolution) - (dimY * resolution / 2);
+            z = z * resolution;
+
+            cubeVertex(fptr, resolution, x, y, z);
         }
     }
 
@@ -432,6 +469,43 @@ void generateMesh(Vector3D *h_vector, const char *path) {
         if (h_grid[i] == true) {
             cubeFace(fptr, nCube);
             nCube++;
+        }
+    }
+
+    fclose(fptr);
+
+    free(h_grid);
+}
+
+void generateSimpleMesh(Vector3D *h_vector, const char *path) {
+    double dimX = h_vector->dimX;
+    double dimY = h_vector->dimY;
+    double dimZ = h_vector->dimZ;
+    double resolution = h_vector->resolution;
+
+    int numCells = dimX * dimY * dimZ;
+
+    bool *h_grid = (bool *)malloc(sizeof(bool) * numCells);
+
+    cudaMemcpy(h_grid, h_vector->d_grid, sizeof(bool) * numCells, cudaMemcpyDeviceToHost);
+
+    FILE *fptr;
+
+    fptr = fopen(path, "w");
+
+    for (int i = 0; i < numCells; i++) {
+        if (h_grid[i] == true) {
+            double z = floor(i / (dimX * dimY));
+
+            double x = floor((i - (z * dimX * dimY)) / dimY);
+
+            double y = i - (x * dimY + z * dimX * dimY);
+
+            x = (x * resolution) - (dimX * resolution / 2);
+            y = (y * resolution) - (dimY * resolution / 2);
+            z = z * resolution;
+
+            vertex(fptr, x, y, z);
         }
     }
 
