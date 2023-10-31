@@ -7,7 +7,7 @@
 
 class Vector3D {
    public:
-    bool *d_grid;
+    char *d_grid;
     int dimX = 0;
     int dimY = 0;
     int dimZ = 0;
@@ -62,7 +62,7 @@ void freeDevicePointcloud(Point *d_pointcloud);
 void generateRandomPointcloud(Vector3D *h_vector, Point *d_pointcloud, int sizePointcloud);
 
 // checks if the grid is legal
-void checkGrid(Vector3D *h_vector);
+// void checkGrid(Vector3D *h_vector);
 
 // checks if there are duplicates in the pointcloud (points with the same x,y,z coordinates)
 void checkDuplicates(Vector3D *h_vector, Point *d_pointcloud, int sizePointcloud);
@@ -84,6 +84,9 @@ void cubeVertex(FILE *file, double res, double x, double y, double z);
 void cubeFace(FILE *file, int nCube);
 void generateMesh(Vector3D *h_vector, const char *path);
 void generateSimpleMesh(Vector3D *h_vector, const char *path);
+
+// ray tracing
+void ray_tracing(Vector3D *h_vector, Point ray_start, Point ray_end);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
 int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);
