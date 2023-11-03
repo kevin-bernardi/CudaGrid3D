@@ -16,9 +16,16 @@ class Vector3D {
 
 class Point {
    public:
-    float x = 0;
-    float y = 0;
-    float z = 0;
+    float x = 0.0;
+    float y = 0.0;
+    float z = 0.0;
+};
+
+class Coord3D {
+   public:
+    int x;
+    int y;
+    int z;
 };
 
 class CudaTransform3D {
@@ -78,15 +85,15 @@ void printGrid(Vector3D *h_vector);
 void printPointcloud(Point *d_pointcloud, int sizePointcloud);
 
 // functions for 3D mesh generation (.obj)
-void vertex(FILE *file, double x, double y, double z);
+void vertex(FILE *file, float x, float y, float z);
 void face(FILE *file, int v1, int v2, int v3);
-void cubeVertex(FILE *file, double res, double x, double y, double z);
+void cubeVertex(FILE *file, float res, float x, float y, float z);
 void cubeFace(FILE *file, int nCube);
 void generateMesh(Vector3D *h_vector, const char *path);
 void generateSimpleMesh(Vector3D *h_vector, const char *path);
 
 // ray tracing
-void ray_tracing(Vector3D *h_vector, Point ray_start, Point ray_end);
+void pointcloudRayTracing(Vector3D *h_vector, Point *pointcloud, int sizePointcloud, Point origin);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
 int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);

@@ -111,8 +111,8 @@ int getLinearIndex(Vector3D *h_vector, int x, int y, int z) {
     }
 }
 
-__device__ int approxFloatKernel(double x) {
-    if (x >= 0) {
+__device__ float approxFloatKernel(float x) {
+    if (x >= 0.0) {
         return floor(x);
     } else {
         return ceil(x);
@@ -131,11 +131,9 @@ __global__ void insertPointcloudKernel(char *d_grid, Point *pointcloud, int n, i
         float numCellRawY = pt.y / resolution;
         float numCellRawZ = pt.z / resolution;
 
-        int x, y, z;
-
-        x = approxFloatKernel(numCellRawX);
-        y = approxFloatKernel(numCellRawY);
-        z = approxFloatKernel(numCellRawZ);
+        int x = approxFloatKernel(numCellRawX);
+        int y = approxFloatKernel(numCellRawY);
+        int z = approxFloatKernel(numCellRawZ);
 
         if (x == 0 && y == 0 && z == 0) {
             // don't add the point at 0,0,0 (without this the mesh would always have a cube at 0,0,0)
@@ -207,8 +205,8 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
 
         curand_init(clock(), tid, 0, &state[tid]);
 
-        float x = (curand_uniform(&(state[tid])) * dimX_meters) - (dimX_meters / 2);
-        float y = (curand_uniform(&(state[tid])) * dimY_meters) - (dimY_meters / 2);
+        float x = (curand_uniform(&(state[tid])) * dimX_meters) - (dimX_meters / 2.0);
+        float y = (curand_uniform(&(state[tid])) * dimY_meters) - (dimY_meters / 2.0);
         float z = (curand_uniform(&(state[tid])) * dimZ_meters);
 
         Point pt;
@@ -218,6 +216,7 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
 
         if (x >= dimX_meters / 2 || y >= dimY_meters / 2 || z >= dimZ_meters || x <= -dimX_meters / 2 || y <= -dimY_meters / 2 || z <= 0) {
             printf("***************ERROR, the generated point doesn't have valid coordinates!***************\n");
+            printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
         } else {
             // printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
             pointcloud[tid] = pt;
@@ -240,25 +239,6 @@ void generateRandomPointcloud(Vector3D *h_vector, Point *pointcloud, int sizePoi
 
     cudaDeviceSynchronize();
 }
-
-// __global__ void checkGridKernel(char *d_grid, int numCells) {
-//     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-//     if (tid < numCells) {
-//         if (tid == numCells - 1) printf("checking grid in kernel\n");
-//         if (d_grid[tid] != true && d_grid[tid] != false) {
-//             printf("Check Failed  ");
-//         }
-//     }
-// }
-
-// // check if the 3D grid contains illegal values
-// void checkGrid(Vector3D *h_vector) {
-//     int numCells = h_vector->dimX * h_vector->dimY * h_vector->dimZ;
-//     int numBlocks = (numCells + 256) / 256;
-//     checkGridKernel<<<numBlocks, 256>>>(h_vector->d_grid, numCells);
-//     cudaDeviceSynchronize();
-// }
 
 __global__ void checkDuplicatesKernel(Point *pointcloud, int *pointcloudIntIdx, int numPoints, int dimX, int dimY, int dimZ, float resolution) {
     for (int i = 0; i < numPoints; i++) {
@@ -395,7 +375,7 @@ void printPointcloud(Point *pointcloud, int sizePointcloud) {
     cudaDeviceSynchronize();
 }
 
-void vertex(FILE *file, double x, double y, double z) {
+void vertex(FILE *file, float x, float y, float z) {
     fprintf(file, "v %f %f %f\n", x, y, z);
 }
 
@@ -403,7 +383,7 @@ void face(FILE *file, int v1, int v2, int v3) {
     fprintf(file, "f %d %d %d\n", v1, v2, v3);
 }
 
-void cubeVertex(FILE *file, double res, double x, double y, double z) {
+void cubeVertex(FILE *file, float res, float x, float y, float z) {
     vertex(file, x, y, z);
     vertex(file, x, y, z + res);
     vertex(file, x, y + res, z);
@@ -437,10 +417,10 @@ void cubeFace(FILE *file, int nCube) {
 }
 
 void generateMesh(Vector3D *h_vector, const char *path) {
-    double dimX = h_vector->dimX;
-    double dimY = h_vector->dimY;
-    double dimZ = h_vector->dimZ;
-    double resolution = h_vector->resolution;
+    float dimX = h_vector->dimX;
+    float dimY = h_vector->dimY;
+    float dimZ = h_vector->dimZ;
+    float resolution = h_vector->resolution;
 
     int numCells = dimX * dimY * dimZ;
 
@@ -456,11 +436,11 @@ void generateMesh(Vector3D *h_vector, const char *path) {
 
     for (int i = 0; i < numCells; i++) {
         if (h_grid[i] == OCCUPIED_CELL) {
-            double z = floor(i / (dimX * dimY));
+            float z = floor(i / (dimX * dimY));
 
-            double x = floor((i - (z * dimX * dimY)) / dimY);
+            float x = floor((i - (z * dimX * dimY)) / dimY);
 
-            double y = i - (x * dimY + z * dimX * dimY);
+            float y = i - (x * dimY + z * dimX * dimY);
 
             x = (x * resolution) - (dimX * resolution / 2);
             y = (y * resolution) - (dimY * resolution / 2);
@@ -483,10 +463,10 @@ void generateMesh(Vector3D *h_vector, const char *path) {
 }
 
 void generateSimpleMesh(Vector3D *h_vector, const char *path) {
-    double dimX = h_vector->dimX;
-    double dimY = h_vector->dimY;
-    double dimZ = h_vector->dimZ;
-    double resolution = h_vector->resolution;
+    float dimX = h_vector->dimX;
+    float dimY = h_vector->dimY;
+    float dimZ = h_vector->dimZ;
+    float resolution = h_vector->resolution;
 
     int numCells = dimX * dimY * dimZ;
 
@@ -500,11 +480,11 @@ void generateSimpleMesh(Vector3D *h_vector, const char *path) {
 
     for (int i = 0; i < numCells; i++) {
         if (h_grid[i] == OCCUPIED_CELL) {
-            double z = floor(i / (dimX * dimY));
+            float z = floor(i / (dimX * dimY));
 
-            double x = floor((i - (z * dimX * dimY)) / dimY);
+            float x = floor((i - (z * dimX * dimY)) / dimY);
 
-            double y = i - (x * dimY + z * dimX * dimY);
+            float y = i - (x * dimY + z * dimX * dimY);
 
             x = (x * resolution) - (dimX * resolution / 2);
             y = (y * resolution) - (dimY * resolution / 2);
@@ -529,7 +509,7 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
         y = d_arr[tid + 1];
         z = d_arr[tid + 2];
 
-        if (!isnan(x) && !isnan(y) && !isnan(z)) {
+        if (!isnan(x) && !isnan(y) && !isnan(z) && !isinf(x) && !isinf(y) && !isinf(z)) {
             Point point;
 
             point.x = x;
@@ -565,22 +545,23 @@ void insertCvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, C
     // cudaDeviceSynchronize();
 }
 
-void printVisitedVoxels(Point *arr, int len) {
+__device__ void printVisitedVoxels(Point *arr, int start, int len) {
     for (int i = 0; i < len; i++) {
-        printf("> %f, %f, %f\n", arr[i].x, arr[i].y, arr[i].z);
+        printf("> %f, %f, %f\n", arr[start + i].x, arr[start + i].y, arr[start + i].z);
     }
+    printf("\n-------------------\n");
 }
 
-__device__ void freePointsKernel(char *d_grid, int dimX, int dimY, int dimZ, Point *d_free_points, int length) {
+__device__ void insertFreePointsKernel(char *d_grid, int dimX, int dimY, int dimZ, Point *d_free_points, int start, int length) {
     for (int i = 1; i < length - 1; i++) {
-        Point pt = d_free_points[i];
+        Point pt = d_free_points[start + i];
 
         int idx = pt.y + pt.x * dimY + pt.z * dimX * dimY;
         d_grid[idx] = FREE_CELL;
     }
 }
 
-int approxFloat(double x) {
+float approxFloat(float x) {
     if (x >= 0) {
         return floor(x);
     } else {
@@ -596,14 +577,15 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, Point pt) {
     return false;
 }
 
-__global__ void rayTracingKernel(char *d_grid, int dimX, int dimY, int dimZ, float resolution, Point *pointcloud, int sizePointcloud, Point ray_start) {
-    int tid = (blockIdx.x * blockDim.x + threadIdx.x);
+__global__ void rayTracingKernel(Point *d_visited_voxels, char *d_grid, int dimX, int dimY, int dimZ, int lengthLongestAxis, float resolution, Point *pointcloud, int sizePointcloud, Point ray_start) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    int d_vst_idx = tid * 15 * lengthLongestAxis;
 
     if (tid < sizePointcloud) {
-        Point *visited_voxels = (Point *)malloc(sizeof(Point) * dimX * dimY);
         int array_idx = 0;
 
-        float _bin_size = 1;
+        float _bin_size = 1.0;
 
         Point ray_end = pointcloud[tid];
 
@@ -613,14 +595,14 @@ __global__ void rayTracingKernel(char *d_grid, int dimX, int dimY, int dimZ, flo
         current_voxel.y = approxFloatKernel(ray_start.y / resolution);
         current_voxel.z = approxFloatKernel(ray_start.z / resolution);
 
-        printf("current voxel: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
+        // printf("current voxel: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
 
         Point last_voxel;
         last_voxel.x = approxFloatKernel(ray_end.x / resolution);
         last_voxel.y = approxFloatKernel(ray_end.y / resolution);
         last_voxel.z = approxFloatKernel(ray_end.z / resolution);
 
-        printf("last voxel: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
+        // printf("last voxel: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
 
         current_voxel.x += (dimX / 2);
         current_voxel.y += (dimY / 2);
@@ -629,8 +611,8 @@ __global__ void rayTracingKernel(char *d_grid, int dimX, int dimY, int dimZ, flo
         last_voxel.y += (dimY / 2);
 
         if (checkPointInGridBounds(dimX, dimY, dimZ, current_voxel) && checkPointInGridBounds(dimX, dimY, dimZ, last_voxel)) {
-            printf("current voxel floored: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
-            printf("last voxel floored: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
+            // printf("current voxel floored: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
+            // printf("last voxel floored: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
         } else {
             printf("Point out of bounds!\n");
             return;
@@ -639,66 +621,70 @@ __global__ void rayTracingKernel(char *d_grid, int dimX, int dimY, int dimZ, flo
         // Compute normalized ray direction.
         Point ray;
 
-        ray.x = ray_end.x - ray_start.x;
-        ray.y = ray_end.y - ray_start.y;
-        ray.z = ray_end.z - ray_start.z;
+        ray.x = last_voxel.x - current_voxel.x;
+        ray.y = last_voxel.y - current_voxel.y;
+        ray.z = last_voxel.z - current_voxel.z;
+
+        // printf("ray: %f, %f, %f\n", ray.x, ray.y, ray.z);
 
         // In which direction the voxel ids are incremented.
-        double stepX = (ray.x >= 0) ? 1 : -1;
-        double stepY = (ray.y >= 0) ? 1 : -1;
-        double stepZ = (ray.z >= 0) ? 1 : -1;
+        float stepX = (ray.x >= 0) ? 1 : -1;
+        float stepY = (ray.y >= 0) ? 1 : -1;
+        float stepZ = (ray.z >= 0) ? 1 : -1;
 
         // Distance along the ray to the next voxel border from the current position (tMaxX, tMaxY, tMaxZ).
-        double next_voxel_boundary_x = (current_voxel.x + stepX) * _bin_size;
-        double next_voxel_boundary_y = (current_voxel.y + stepY) * _bin_size;
-        double next_voxel_boundary_z = (current_voxel.z + stepZ) * _bin_size;
+        float next_voxel_boundary_x = (current_voxel.x + stepX) * _bin_size;
+        float next_voxel_boundary_y = (current_voxel.y + stepY) * _bin_size;
+        float next_voxel_boundary_z = (current_voxel.z + stepZ) * _bin_size;
 
         // tMaxX, tMaxY, tMaxZ -- distance until next intersection with voxel-border
         // the value of t at which the ray crosses the first vertical voxel boundary
-        double tMaxX = (ray.x != 0) ? (next_voxel_boundary_x - ray_start.x) / ray.x : DBL_MAX;
-        double tMaxY = (ray.y != 0) ? (next_voxel_boundary_y - ray_start.y) / ray.y : DBL_MAX;
-        double tMaxZ = (ray.z != 0) ? (next_voxel_boundary_z - ray_start.z) / ray.z : DBL_MAX;
+        float tMaxX = (ray.x != 0) ? (next_voxel_boundary_x - current_voxel.x) / ray.x : FLT_MAX;
+        float tMaxY = (ray.y != 0) ? (next_voxel_boundary_y - current_voxel.y) / ray.y : FLT_MAX;
+        float tMaxZ = (ray.z != 0) ? (next_voxel_boundary_z - current_voxel.z) / ray.z : FLT_MAX;
 
         // tDeltaX, tDeltaY, tDeltaZ --
         // how far along the ray we must move for the horizontal component to equal the width of a voxel
         // the direction in which we traverse the grid
         // can only be FLT_MAX if we never go in that direction
-        double tDeltaX = (ray.x != 0) ? _bin_size / ray.x * stepX : DBL_MAX;
-        double tDeltaY = (ray.y != 0) ? _bin_size / ray.y * stepY : DBL_MAX;
-        double tDeltaZ = (ray.z != 0) ? _bin_size / ray.z * stepZ : DBL_MAX;
+        float tDeltaX = (ray.x != 0) ? _bin_size / ray.x * stepX : FLT_MAX;
+        float tDeltaY = (ray.y != 0) ? _bin_size / ray.y * stepY : FLT_MAX;
+        float tDeltaZ = (ray.z != 0) ? _bin_size / ray.z * stepZ : FLT_MAX;
 
-        Point diff;
-        diff.x = 0;
-        diff.y = 0;
-        diff.z = 0;
+        // Point diff;
+        // diff.x = 0.0;
+        // diff.y = 0.0;
+        // diff.z = 0.0;
 
-        bool neg_ray = false;
-        if (current_voxel.x != last_voxel.x && ray.x < 0) {
-            diff.x--;
-            neg_ray = true;
-        }
-        if (current_voxel.y != last_voxel.y && ray.y < 0) {
-            diff.y--;
-            neg_ray = true;
-        }
-        if (current_voxel.z != last_voxel.z && ray.z < 0) {
-            diff.z--;
-            neg_ray = true;
-        }
+        // bool neg_ray = false;
+        // if (current_voxel.x != last_voxel.x && ray.x < 0) {
+        //     diff.x--;
+        //     neg_ray = true;
+        // }
+        // if (current_voxel.y != last_voxel.y && ray.y < 0) {
+        //     diff.y--;
+        //     neg_ray = true;
+        // }
+        // if (current_voxel.z != last_voxel.z && ray.z < 0) {
+        //     diff.z--;
+        //     neg_ray = true;
+        // }
 
-        visited_voxels[array_idx] = current_voxel;
+        d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
         array_idx++;
 
-        if (neg_ray) {
-            current_voxel.x += diff.x;
-            current_voxel.y += diff.y;
-            current_voxel.z += diff.z;
+        // if (neg_ray) {
+        //     current_voxel.x += diff.x;
+        //     current_voxel.y += diff.y;
+        //     current_voxel.z += diff.z;
 
-            visited_voxels[array_idx] = current_voxel;
-            array_idx++;
-        }
+        //     d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
+        //     array_idx++;
+        // }
 
+        // printf("before cycle tMaxX=%f, tMaxY=%f, tMaxZ=%f\n", tMaxX, tMaxY, tMaxZ);
         while (current_voxel.x != last_voxel.x || current_voxel.y != last_voxel.y || current_voxel.z != last_voxel.z) {
+            // printf("tMaxX=%f, tMaxY=%f, tMaxZ=%f\n", tMaxX, tMaxY, tMaxZ);
             if (tMaxX < tMaxY) {
                 if (tMaxX < tMaxZ) {
                     current_voxel.x += stepX;
@@ -717,21 +703,45 @@ __global__ void rayTracingKernel(char *d_grid, int dimX, int dimY, int dimZ, flo
                 }
             }
 
-            visited_voxels[array_idx] = current_voxel;
+            d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
             array_idx++;
         }
+        // printf("array idx: %d\n", array_idx);
+        //  printVisitedVoxels(d_visited_voxels, d_vst_idx, array_idx);
 
-        // printVisitedVoxels(visited_voxels, array_idx);
-
-        Point *d_free_points;
-        initDevicePointcloud(&d_free_points, visited_voxels, array_idx);
-        freePointsKernel(d_grid, dimX, dimY, dimZ, d_free_points, array_idx);
-        cudaDeviceSynchronize();
+        insertFreePointsKernel(d_grid, dimX, dimY, dimZ, d_visited_voxels, d_vst_idx, array_idx);
     }
 }
 
-void rayTracing(Vector3D *h_vector, Point *pointcloud, int sizePointcloud, Point ray_start) {
+void pointcloudRayTracing(Vector3D *h_vector, Point *d_pointcloud, int sizePointcloud, Point origin) {
     int numBlocks = (sizePointcloud + 256) / 256;
 
-    rayTracingKernel<<<numBlocks, 256>>>(h_vector->d_grid, h_vector->dimX, h_vector->dimY, h_vector->dimZ, h_vector->resolution, pointcloud, sizePointcloud, ray_start);
+    int dimX = h_vector->dimX;
+    int dimY = h_vector->dimY;
+    int dimZ = h_vector->dimZ;
+
+    // get longest axis
+    int lengthLongestAxis = 0;
+
+    if (dimX >= dimY) {
+        if (dimX >= dimZ) {
+            lengthLongestAxis = dimX;
+        } else {
+            lengthLongestAxis = dimZ;
+        }
+
+    } else {
+        if (dimY >= dimZ) {
+            lengthLongestAxis = dimY;
+        } else {
+            lengthLongestAxis = dimZ;
+        }
+    }
+    printf("Lenght longest axis: %d\n", lengthLongestAxis);
+
+    Point *d_visited_voxels;
+    cudaMalloc(&d_visited_voxels, sizePointcloud * sizeof(Point) * 15 * lengthLongestAxis);
+
+    rayTracingKernel<<<numBlocks, 256>>>(d_visited_voxels, h_vector->d_grid, h_vector->dimX, h_vector->dimY, h_vector->dimZ, lengthLongestAxis, h_vector->resolution, d_pointcloud, sizePointcloud, origin);
+    cudaDeviceSynchronize();
 }
