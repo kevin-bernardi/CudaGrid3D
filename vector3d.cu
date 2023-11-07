@@ -71,18 +71,16 @@ void freeVector(Vector3D *h_vector) {
     free(h_vector);
 }
 
-void getCoordinatesInv(Vector3D *h_vector, int index, int **result) {
-    *result = (int *)malloc(sizeof(int) * 3);
-
+void getCoordinatesInv(Vector3D *h_vector, int index, int *result) {
     int dimX = h_vector->dimX;
     int dimY = h_vector->dimY;
     int dimZ = h_vector->dimZ;
 
     if (index >= dimX * dimY * dimZ) {
         printf("getCoordinatesInv() ERROR! Index out of bounds!\n");
-        (*result)[0] = -1;
-        (*result)[1] = -1;
-        (*result)[2] = -1;
+        result[0] = -1;
+        result[1] = -1;
+        result[2] = -1;
         return;
     }
 
@@ -92,9 +90,9 @@ void getCoordinatesInv(Vector3D *h_vector, int index, int **result) {
 
     int y = index - (x * dimY + z * dimX * dimY);
 
-    (*result)[0] = x;
-    (*result)[1] = y;
-    (*result)[2] = z;
+    result[0] = x;
+    result[1] = y;
+    result[2] = z;
 
     return;
 }
@@ -417,9 +415,9 @@ void cubeFace(FILE *file, int nCube) {
 }
 
 void generateMesh(Vector3D *h_vector, const char *path) {
-    float dimX = h_vector->dimX;
-    float dimY = h_vector->dimY;
-    float dimZ = h_vector->dimZ;
+    int dimX = h_vector->dimX;
+    int dimY = h_vector->dimY;
+    int dimZ = h_vector->dimZ;
     float resolution = h_vector->resolution;
 
     int numCells = dimX * dimY * dimZ;
@@ -436,17 +434,30 @@ void generateMesh(Vector3D *h_vector, const char *path) {
 
     for (int i = 0; i < numCells; i++) {
         if (h_grid[i] == OCCUPIED_CELL) {
-            float z = floor(i / (dimX * dimY));
+            // float z = floor(i / (dimX * dimY));
 
-            float x = floor((i - (z * dimX * dimY)) / dimY);
+            // float x = floor((i - (z * dimX * dimY)) / dimY);
 
-            float y = i - (x * dimY + z * dimX * dimY);
+            // float y = i - (x * dimY + z * dimX * dimY);
+
+            int *result = (int *)malloc(sizeof(int) * 3);
+            getCoordinatesInv(h_vector, i, result);
+
+            float x = result[0];
+            float y = result[1];
+            float z = result[2];
 
             x = (x * resolution) - (dimX * resolution / 2);
             y = (y * resolution) - (dimY * resolution / 2);
             z = z * resolution;
 
+            // remove the small floating point error
+            x = floor(x * 1000.0) / 1000.0;
+            y = floor(y * 1000.0) / 1000.0;
+            z = floor(z * 1000.0) / 1000.0;
+
             cubeVertex(fptr, resolution, x, y, z);
+            free(result);
         }
     }
 
@@ -480,17 +491,24 @@ void generateSimpleMesh(Vector3D *h_vector, const char *path) {
 
     for (int i = 0; i < numCells; i++) {
         if (h_grid[i] == OCCUPIED_CELL) {
-            float z = floor(i / (dimX * dimY));
+            int *result = (int *)malloc(sizeof(int) * 3);
+            getCoordinatesInv(h_vector, i, result);
 
-            float x = floor((i - (z * dimX * dimY)) / dimY);
-
-            float y = i - (x * dimY + z * dimX * dimY);
+            float x = result[0];
+            float y = result[1];
+            float z = result[2];
 
             x = (x * resolution) - (dimX * resolution / 2);
             y = (y * resolution) - (dimY * resolution / 2);
             z = z * resolution;
 
+            // remove the small floating point error
+            x = floor(x * 1000.0) / 1000.0;
+            y = floor(y * 1000.0) / 1000.0;
+            z = floor(z * 1000.0) / 1000.0;
+
             vertex(fptr, x, y, z);
+            free(result);
         }
     }
 
@@ -509,7 +527,8 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
         y = d_arr[tid + 1];
         z = d_arr[tid + 2];
 
-        if (!isnan(x) && !isnan(y) && !isnan(z) && !isinf(x) && !isinf(y) && !isinf(z)) {
+        // if (!isnan(x) && !isnan(y) && !isnan(z) && !isinf(x) && !isinf(y) && !isinf(z)) {
+        if (!isnan(x) && !isnan(y) && !isnan(z)) {
             Point point;
 
             point.x = x;
@@ -521,6 +540,10 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
             res.x = tf.tra[0] + tf.rot[0][0] * point.x + tf.rot[0][1] * point.y + tf.rot[0][2] * point.z;
             res.y = tf.tra[1] + tf.rot[1][0] * point.x + tf.rot[1][1] * point.y + tf.rot[1][2] * point.z;
             res.z = tf.tra[2] + tf.rot[2][0] * point.x + tf.rot[2][1] * point.y + tf.rot[2][2] * point.z;
+
+            res.x = floor(res.x * 1000.0) / 1000.0;
+            res.y = floor(res.y * 1000.0) / 1000.0;
+            res.z = floor(res.z * 1000.0) / 1000.0;
 
             // printf("rt_point in kernel: %f, %f, %f\n", res.x, res.y, res.z);
 

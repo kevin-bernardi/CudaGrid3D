@@ -6,10 +6,10 @@ INCLUDE_OPENCV=-I/usr/include/opencv4/
 #INCLUDE_STAR=-I/home/serl/STAR/AutonomousRobots/Libraries/star/include
 
 build: $(OUTPUT)
-	mkdir -p output
-	cp $(SHARED_LIB_NAME).so ./output/$(SHARED_LIB_NAME).so
-	mkdir -p ./output/include
-	cp $(PROGRAM).h ./output/include/$(PROGRAM).h
+	mkdir -p output/CudaVector3D
+	cp $(SHARED_LIB_NAME).so ./output/CudaVector3D/$(SHARED_LIB_NAME).so
+	mkdir -p ./output/CudaVector3D/include
+	cp $(PROGRAM).h ./output/CudaVector3D/include/$(PROGRAM).h
 
 $(OUTPUT): $(SHARED_LIB_NAME).so $(PROGRAM).h main.cpp
 	g++  -o $(OUTPUT) main.cpp -L./ -L/home/serl/STAR/AutonomousRobots/Libraries/star/lib/ -l$(PROGRAM) -lopencv_core $(INCLUDE_OPENCV)
@@ -22,3 +22,4 @@ $(PROGRAM).o: $(PROGRAM).cu $(PROGRAM).h
 
 clean:
 	rm -f $(PROGRAM).o $(SHARED_LIB_NAME).so *.obj $(OUTPUT)
+	rm -rf output

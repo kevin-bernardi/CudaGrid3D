@@ -16,9 +16,9 @@ class Vector3D {
 
 class Point {
    public:
-    float x = 0.0;
-    float y = 0.0;
-    float z = 0.0;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
 };
 
 class Coord3D {
@@ -30,8 +30,8 @@ class Coord3D {
 
 class CudaTransform3D {
    public:
-    float tra[3];
-    float rot[3][3];
+    double tra[3];
+    double rot[3][3];
 };
 
 // initialize the 3D Grid on the device
@@ -44,7 +44,7 @@ void freeVector(Vector3D *h_vector);
 // if index is not valid the result will be (-1, -1, -1)
 // result is a pointer to a pointer because the allocation of the required space
 // for result is done in inside the function
-void getCoordinatesInv(Vector3D *h_vector, int index, int **result);
+void getCoordinatesInv(Vector3D *h_vector, int index, int *result);
 
 // calculate the 1D index with the 3D coordinates (x,y,z)
 int getLinearIndex(Vector3D *h_vector, int x, int y, int z);
