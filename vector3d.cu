@@ -140,6 +140,7 @@ __global__ void insertPointcloudKernel(char *d_grid, Point *pointcloud, int n, i
 
         x += (dimX / 2);
         y += (dimY / 2);
+        z += (dimZ / 10);
 
         // int x = floor(pt.x / resolution) + (dimX / 2);
         // int y = floor(pt.y / resolution) + (dimY / 2);
@@ -449,7 +450,7 @@ void generateMesh(Vector3D *h_vector, const char *path) {
 
             x = (x * resolution) - (dimX * resolution / 2);
             y = (y * resolution) - (dimY * resolution / 2);
-            z = z * resolution;
+            z = (z * resolution) - (dimZ * resolution / 10);
 
             // remove the small floating point error
             x = floor(x * 1000.0) / 1000.0;
@@ -500,7 +501,8 @@ void generateSimpleMesh(Vector3D *h_vector, const char *path) {
 
             x = (x * resolution) - (dimX * resolution / 2);
             y = (y * resolution) - (dimY * resolution / 2);
-            z = z * resolution;
+            // z = z * resolution;
+            z = (z * resolution) - (dimZ * resolution / 10);
 
             // remove the small floating point error
             x = floor(x * 1000.0) / 1000.0;
@@ -629,16 +631,22 @@ __global__ void rayTracingKernel(Point *d_visited_voxels, char *d_grid, int dimX
 
         current_voxel.x += (dimX / 2);
         current_voxel.y += (dimY / 2);
+        current_voxel.z += (dimZ / 10);
 
         last_voxel.x += (dimX / 2);
         last_voxel.y += (dimY / 2);
+        last_voxel.z += (dimZ / 10);
 
-        if (checkPointInGridBounds(dimX, dimY, dimZ, current_voxel) && checkPointInGridBounds(dimX, dimY, dimZ, last_voxel)) {
+        if (checkPointInGridBounds(dimX, dimY, dimZ, current_voxel)) {
             // printf("current voxel floored: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
+        } else {
+            // printf("current voxel out of bounds! pt (%f,%f,%f)\n", current_voxel.x, current_voxel.y, current_voxel.z);
+        }
+
+        if (checkPointInGridBounds(dimX, dimY, dimZ, last_voxel)) {
             // printf("last voxel floored: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
         } else {
-            printf("Point out of bounds!\n");
-            return;
+            // printf("last voxel out of bounds! pt (%f,%f,%f)\n", last_voxel.x, last_voxel.y, last_voxel.z);
         }
 
         // Compute normalized ray direction.
@@ -760,7 +768,7 @@ void pointcloudRayTracing(Vector3D *h_vector, Point *d_pointcloud, int sizePoint
             lengthLongestAxis = dimZ;
         }
     }
-    printf("Lenght longest axis: %d\n", lengthLongestAxis);
+    // printf("Lenght longest axis: %d\n", lengthLongestAxis);
 
     Point *d_visited_voxels;
     cudaMalloc(&d_visited_voxels, sizePointcloud * sizeof(Point) * 15 * lengthLongestAxis);

@@ -42,8 +42,7 @@ void freeVector(Vector3D *h_vector);
 
 // get the 3D coordinates with the 1D index and the Grid size
 // if index is not valid the result will be (-1, -1, -1)
-// result is a pointer to a pointer because the allocation of the required space
-// for result is done in inside the function
+// result contains the 3 coordinates (x,y,z)
 void getCoordinatesInv(Vector3D *h_vector, int index, int *result);
 
 // calculate the 1D index with the 3D coordinates (x,y,z)
