@@ -41,14 +41,15 @@ int main(int argc, char* argv[]) {
     initDevicePointcloud(&d_pointcloud, numPoints);
     generateRandomPointcloud(h_vector, d_pointcloud, numPoints);
     insertPointcloud(h_vector, d_pointcloud, numPoints);
-    // printGrid(h_vector);
+    printGrid(h_vector);
 
     Point ori;
-    ori.x = 0;
-    ori.y = 0;
+    ori.x = -0.5;
+    ori.y = -0.5;
     ori.z = 0;
 
     pointcloudRayTracing(h_vector, d_pointcloud, numPoints, ori);
+    freeDevicePointcloud(d_pointcloud);
 
-    // printGrid(h_vector);
+    printGrid(h_vector);
 }

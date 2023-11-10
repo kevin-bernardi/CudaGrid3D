@@ -527,7 +527,7 @@ void generateSimpleMesh(Vector3D *h_vector, const char *path) {
     free(h_grid);
 }
 
-__global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int length, int *eff_length, CudaTransform3D tf) {
+__global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int length, CudaTransform3D tf) {
     int tid = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
 
     if (tid < length) {
@@ -538,7 +538,6 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
         z = d_arr[tid + 2];
 
         if (!isnan(x) && !isnan(y) && !isnan(z) && !isinf(x) && !isinf(y) && !isinf(z)) {
-            atomicAdd(eff_length, 1);
             Point point;
 
             point.x = x;
@@ -568,24 +567,24 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
     }
 }
 
-void insertCvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, int *sizePointCloudNNP, CudaTransform3D tf) {
-    float *d_arr;
+void insertCvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, CudaTransform3D tf) {
+    float *d_cvmat_arr;
+    cudaMalloc(&d_cvmat_arr, sizeof(float) * length);
 
-    int *d_eff_length;
-    cudaMalloc(&d_eff_length, sizeof(int));
+    // copy the content of host cvmat_arr to device
+    cudaMemcpy(d_cvmat_arr, h_cvmat_arr, sizeof(float) * length, cudaMemcpyHostToDevice);
 
-    cudaMalloc(&d_arr, sizeof(float) * length);
-    cudaMemcpy(d_arr, h_array, sizeof(float) * length, cudaMemcpyHostToDevice);
-
+    // initialize the pointcloud that holds the points found in the input matrix
     int numPoints = length / 4;
-
     initDevicePointcloud(d_pointcloud, numPoints);
 
+    // call kernel function
     int numBlocks = (numPoints + 256) / 256;
+    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_cvmat_arr, length, tf);
 
-    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_arr, length, d_eff_length, tf);
+    // free device memory
+    cudaFree(d_cvmat_arr);
 
-    cudaMemcpy(sizePointCloudNNP, d_eff_length, sizeof(int), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
 }
 
@@ -597,7 +596,7 @@ __device__ void printVisitedVoxels(Point *arr, int start, int len) {
 }
 
 __device__ void insertFreePointsKernel(char *d_grid, int dimX, int dimY, int dimZ, Point *d_free_points, int start, int length) {
-    for (int i = 1; i < length - 1; i++) {
+    for (int i = 1; i < length; i++) {
         Point pt = d_free_points[start + i];
 
         int idx = pt.y + pt.x * dimY + pt.z * dimX * dimY;
@@ -616,10 +615,10 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, Point pt) {
     return false;
 }
 
-__global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_it, char *d_grid, int dimX, int dimY, int dimZ, int lengthLongestAxis, float resolution, Point *pointcloud, int sizePointcloud, Point ray_start) {
+__global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_it, char *d_grid, int dimX, int dimY, int dimZ, int maxTraversedVoxelsPerRay, float resolution, Point *pointcloud, int sizePointcloud, Point ray_start) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int start_idx = i * points_per_it;
-    int d_vst_idx = tid * 15 * lengthLongestAxis;
+    int d_vst_idx = tid * maxTraversedVoxelsPerRay;
 
     if (tid < points_per_it && (start_idx + tid) < sizePointcloud) {
         int array_idx = 0;
@@ -642,6 +641,26 @@ __global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_
         last_voxel.x = approxFloatKernel(ray_end.x / resolution);
         last_voxel.y = approxFloatKernel(ray_end.y / resolution);
         last_voxel.z = approxFloatKernel(ray_end.z / resolution);
+
+        // end the ray a diagonal cell before
+
+        if (last_voxel.x - current_voxel.x > 0) {
+            last_voxel.x -= 1;
+        } else if (last_voxel.x - current_voxel.x < 0) {
+            last_voxel.x += 1;
+        }
+
+        if (last_voxel.y - current_voxel.y > 0) {
+            last_voxel.y -= 1;
+        } else if (last_voxel.y - current_voxel.y < 0) {
+            last_voxel.y += 1;
+        }
+
+        if (last_voxel.z - current_voxel.z > 0) {
+            last_voxel.z -= 1;
+        } else if (last_voxel.z - current_voxel.z < 0) {
+            last_voxel.z += 1;
+        }
 
         // printf("last voxel: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
 
@@ -767,36 +786,26 @@ void pointcloudRayTracing(Vector3D *h_vector, Point *d_pointcloud, int sizePoint
     int dimY = h_vector->dimY;
     int dimZ = h_vector->dimZ;
 
-    // get longest axis
-    int lengthLongestAxis = 0;
-
-    if (dimX >= dimY) {
-        if (dimX >= dimZ) {
-            lengthLongestAxis = dimX;
-        } else {
-            lengthLongestAxis = dimZ;
-        }
-
-    } else {
-        if (dimY >= dimZ) {
-            lengthLongestAxis = dimY;
-        } else {
-            lengthLongestAxis = dimZ;
-        }
-    }
-    // printf("Lenght longest axis: %d\n", lengthLongestAxis);
-
-    // parallelizzare tutto richiede troppa memoria
-    // crea nIterations operazioni seriali
-    // ogni operazione seriale fa il raytracing di points_per_it = sizePointcloud/nIterations punti
+    // parallelize everything is not feasible!
+    // create nIterations serial jobs
+    // for each job raytrace points_per_it points which is equal to sizePointcloud/nIterations
     int nIterations = 1000;
     int points_per_it = (sizePointcloud / nIterations) + 1;
+
+    // security factor
+    // the number of traversed voxels is equal to the number of traversed voxels by the longest possible ray which is
+    // the diagonal of the 3D grid (= sqrt(a^2+b^2+c^2)) multiplied by a security factor (the number of traversed voxel by a ray is AT LEAST equal to the length of the ray expressed in number of voxels)
+    int diagonal = floor(sqrt(dimX * dimX + dimY * dimY + dimZ * dimZ));
+    int spaceFactor = 10;
+    int maxTraversedVoxelsPerRay = spaceFactor * diagonal;
+
     Point *d_visited_voxels;
-    cudaMalloc(&d_visited_voxels, points_per_it * sizeof(Point) * 15 * lengthLongestAxis);
+    // cudaMalloc only of the space required by a single serial job
+    cudaMalloc(&d_visited_voxels, points_per_it * sizeof(Point) * maxTraversedVoxelsPerRay);
 
     for (int i = 0; i < nIterations; i++) {
         int numBlocks = (points_per_it + 256) / 256;
-        rayTracingKernel<<<numBlocks, 256>>>(d_visited_voxels, i, points_per_it, h_vector->d_grid, h_vector->dimX, h_vector->dimY, h_vector->dimZ, lengthLongestAxis, h_vector->resolution, d_pointcloud, sizePointcloud, origin);
+        rayTracingKernel<<<numBlocks, 256>>>(d_visited_voxels, i, points_per_it, h_vector->d_grid, h_vector->dimX, h_vector->dimY, h_vector->dimZ, maxTraversedVoxelsPerRay, h_vector->resolution, d_pointcloud, sizePointcloud, origin);
     }
 
     cudaFree(d_visited_voxels);
