@@ -10,12 +10,18 @@ float getTimeDifference(timeval t1, timeval t2) {
     return diff;
 }
 
-int main(int argc, char *argv[]) {
-    int dimX = 1000;  // units
-    int dimY = 1000;
-    int dimZ = 1000;
+void cvMatToArray(cv::Mat* cv_matrix, float** result, int* result_length) {
+    // convert cv::Mat to classic C array
+    *result = cv_matrix->isContinuous() ? (float*)cv_matrix->data : (float*)cv_matrix->clone().data;
+    *result_length = cv_matrix->total() * cv_matrix->channels();
+}
+
+int main(int argc, char* argv[]) {
+    int dimX = 10;  // units
+    int dimY = 10;
+    int dimZ = 1;
     float resolution = 0.1;
-    int numPoints = 10000;
+    int numPoints = 10;
 
     if (argc >= 6) {
         dimX = std::stoi(argv[1]);
@@ -27,10 +33,10 @@ int main(int argc, char *argv[]) {
 
     std::cout << dimX << " " << dimY << " " << dimZ << " " << resolution << " " << numPoints << std::endl;
 
-    Vector3D *h_vector = new Vector3D;
+    Vector3D* h_vector = new Vector3D;
     initVector(h_vector, dimX, dimY, dimZ, resolution);
 
-    Point *d_pointcloud;
+    Point* d_pointcloud;
 
     initDevicePointcloud(&d_pointcloud, numPoints);
     generateRandomPointcloud(h_vector, d_pointcloud, numPoints);
@@ -38,8 +44,8 @@ int main(int argc, char *argv[]) {
     // printGrid(h_vector);
 
     Point ori;
-    ori.x = -0.5;
-    ori.y = -0.2;
+    ori.x = 0;
+    ori.y = 0;
     ori.z = 0;
 
     pointcloudRayTracing(h_vector, d_pointcloud, numPoints, ori);

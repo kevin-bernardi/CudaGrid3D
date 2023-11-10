@@ -31,6 +31,14 @@ the signature of the function calls inside the main()
 #define OCCUPIED_CELL 1
 #define FREE_CELL 2
 
+float approxFloat(float x) {
+    if (x >= 0) {
+        return floor(x);
+    } else {
+        return ceil(x);
+    }
+}
+
 __global__ void initGridKernel(char *d_grid, int numCells) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -453,9 +461,9 @@ void generateMesh(Vector3D *h_vector, const char *path) {
             z = (z * resolution) - (dimZ * resolution / 10);
 
             // remove the small floating point error
-            x = floor(x * 1000.0) / 1000.0;
-            y = floor(y * 1000.0) / 1000.0;
-            z = floor(z * 1000.0) / 1000.0;
+            x = approxFloat(x * 100000.0) / 100000.0;
+            y = approxFloat(y * 100000.0) / 100000.0;
+            z = approxFloat(z * 100000.0) / 100000.0;
 
             cubeVertex(fptr, resolution, x, y, z);
             free(result);
@@ -505,9 +513,9 @@ void generateSimpleMesh(Vector3D *h_vector, const char *path) {
             z = (z * resolution) - (dimZ * resolution / 10);
 
             // remove the small floating point error
-            x = floor(x * 1000.0) / 1000.0;
-            y = floor(y * 1000.0) / 1000.0;
-            z = floor(z * 1000.0) / 1000.0;
+            x = approxFloat(x * 100000.0) / 100000.0;
+            y = approxFloat(y * 100000.0) / 100000.0;
+            z = approxFloat(z * 100000.0) / 100000.0;
 
             vertex(fptr, x, y, z);
             free(result);
@@ -519,7 +527,7 @@ void generateSimpleMesh(Vector3D *h_vector, const char *path) {
     free(h_grid);
 }
 
-__global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int length, CudaTransform3D tf) {
+__global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int length, int *eff_length, CudaTransform3D tf) {
     int tid = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
 
     if (tid < length) {
@@ -529,8 +537,8 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
         y = d_arr[tid + 1];
         z = d_arr[tid + 2];
 
-        // if (!isnan(x) && !isnan(y) && !isnan(z) && !isinf(x) && !isinf(y) && !isinf(z)) {
-        if (!isnan(x) && !isnan(y) && !isnan(z)) {
+        if (!isnan(x) && !isnan(y) && !isnan(z) && !isinf(x) && !isinf(y) && !isinf(z)) {
+            atomicAdd(eff_length, 1);
             Point point;
 
             point.x = x;
@@ -539,13 +547,19 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
 
             Point res;
 
+            // rototranslate point
             res.x = tf.tra[0] + tf.rot[0][0] * point.x + tf.rot[0][1] * point.y + tf.rot[0][2] * point.z;
             res.y = tf.tra[1] + tf.rot[1][0] * point.x + tf.rot[1][1] * point.y + tf.rot[1][2] * point.z;
             res.z = tf.tra[2] + tf.rot[2][0] * point.x + tf.rot[2][1] * point.y + tf.rot[2][2] * point.z;
 
-            res.x = floor(res.x * 1000.0) / 1000.0;
-            res.y = floor(res.y * 1000.0) / 1000.0;
-            res.z = floor(res.z * 1000.0) / 1000.0;
+            // res.x = x;
+            // res.y = y;
+            // res.z = z;
+
+            // remove floating point division error
+            res.x = approxFloatKernel(res.x * 100000.0) / 100000.0;
+            res.y = approxFloatKernel(res.y * 100000.0) / 100000.0;
+            res.z = approxFloatKernel(res.z * 100000.0) / 100000.0;
 
             // printf("rt_point in kernel: %f, %f, %f\n", res.x, res.y, res.z);
 
@@ -554,8 +568,11 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
     }
 }
 
-void insertCvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTransform3D tf) {
+void insertCvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, int *sizePointCloudNNP, CudaTransform3D tf) {
     float *d_arr;
+
+    int *d_eff_length;
+    cudaMalloc(&d_eff_length, sizeof(int));
 
     cudaMalloc(&d_arr, sizeof(float) * length);
     cudaMemcpy(d_arr, h_array, sizeof(float) * length, cudaMemcpyHostToDevice);
@@ -566,8 +583,10 @@ void insertCvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, C
 
     int numBlocks = (numPoints + 256) / 256;
 
-    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_arr, length, tf);
-    // cudaDeviceSynchronize();
+    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_arr, length, d_eff_length, tf);
+
+    cudaMemcpy(sizePointCloudNNP, d_eff_length, sizeof(int), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
 }
 
 __device__ void printVisitedVoxels(Point *arr, int start, int len) {
@@ -582,15 +601,10 @@ __device__ void insertFreePointsKernel(char *d_grid, int dimX, int dimY, int dim
         Point pt = d_free_points[start + i];
 
         int idx = pt.y + pt.x * dimY + pt.z * dimX * dimY;
-        d_grid[idx] = FREE_CELL;
-    }
-}
 
-float approxFloat(float x) {
-    if (x >= 0) {
-        return floor(x);
-    } else {
-        return ceil(x);
+        if (idx < dimX * dimY * dimZ) {
+            d_grid[idx] = FREE_CELL;
+        }
     }
 }
 
@@ -602,17 +616,19 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, Point pt) {
     return false;
 }
 
-__global__ void rayTracingKernel(Point *d_visited_voxels, char *d_grid, int dimX, int dimY, int dimZ, int lengthLongestAxis, float resolution, Point *pointcloud, int sizePointcloud, Point ray_start) {
+__global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_it, char *d_grid, int dimX, int dimY, int dimZ, int lengthLongestAxis, float resolution, Point *pointcloud, int sizePointcloud, Point ray_start) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
+    int start_idx = i * points_per_it;
     int d_vst_idx = tid * 15 * lengthLongestAxis;
 
-    if (tid < sizePointcloud) {
+    if (tid < points_per_it && (start_idx + tid) < sizePointcloud) {
         int array_idx = 0;
-
         float _bin_size = 1.0;
+        Point ray_end = pointcloud[start_idx + tid];
 
-        Point ray_end = pointcloud[tid];
+        if (ray_end.x == 0.0 && ray_end.y == 0.0 && ray_end.z == 0.0) {
+            return;
+        }
 
         // This id of the first/current voxel hit by the ray.
         Point current_voxel;
@@ -745,7 +761,7 @@ __global__ void rayTracingKernel(Point *d_visited_voxels, char *d_grid, int dimX
 }
 
 void pointcloudRayTracing(Vector3D *h_vector, Point *d_pointcloud, int sizePointcloud, Point origin) {
-    int numBlocks = (sizePointcloud + 256) / 256;
+    // int numBlocks = (sizePointcloud + 256) / 256;
 
     int dimX = h_vector->dimX;
     int dimY = h_vector->dimY;
@@ -770,9 +786,18 @@ void pointcloudRayTracing(Vector3D *h_vector, Point *d_pointcloud, int sizePoint
     }
     // printf("Lenght longest axis: %d\n", lengthLongestAxis);
 
+    // parallelizzare tutto richiede troppa memoria
+    // crea nIterations operazioni seriali
+    // ogni operazione seriale fa il raytracing di points_per_it = sizePointcloud/nIterations punti
+    int nIterations = 1000;
+    int points_per_it = (sizePointcloud / nIterations) + 1;
     Point *d_visited_voxels;
-    cudaMalloc(&d_visited_voxels, sizePointcloud * sizeof(Point) * 15 * lengthLongestAxis);
+    cudaMalloc(&d_visited_voxels, points_per_it * sizeof(Point) * 15 * lengthLongestAxis);
 
-    rayTracingKernel<<<numBlocks, 256>>>(d_visited_voxels, h_vector->d_grid, h_vector->dimX, h_vector->dimY, h_vector->dimZ, lengthLongestAxis, h_vector->resolution, d_pointcloud, sizePointcloud, origin);
-    cudaDeviceSynchronize();
+    for (int i = 0; i < nIterations; i++) {
+        int numBlocks = (points_per_it + 256) / 256;
+        rayTracingKernel<<<numBlocks, 256>>>(d_visited_voxels, i, points_per_it, h_vector->d_grid, h_vector->dimX, h_vector->dimY, h_vector->dimZ, lengthLongestAxis, h_vector->resolution, d_pointcloud, sizePointcloud, origin);
+    }
+
+    cudaFree(d_visited_voxels);
 }
