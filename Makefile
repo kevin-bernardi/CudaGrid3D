@@ -15,7 +15,7 @@ $(OUTPUT): $(SHARED_LIB_NAME).so $(PROGRAM).h main.cpp
 	g++  -o $(OUTPUT) main.cpp -L./ -L/home/serl/STAR/AutonomousRobots/Libraries/star/lib/ -l$(PROGRAM) -lopencv_core $(INCLUDE_OPENCV)
 
 $(SHARED_LIB_NAME).so: $(PROGRAM).o
-	g++ -shared -fPIC -o $(SHARED_LIB_NAME).so $(PROGRAM).o  -L/usr/local/cuda/lib64 -lcuda -lcudart
+	g++ -shared -fPIC -o $(SHARED_LIB_NAME).so $(PROGRAM).o  -L/usr/local/cuda/lib64 -lcuda -lcudart -L/usr/X11R6/lib -lm -lpthread -lX11
 
 $(PROGRAM).o: $(PROGRAM).cu $(PROGRAM).h
 	nvcc -c -Xcompiler -fPIC $(PROGRAM).cu

@@ -19,11 +19,11 @@ void cvMatToArray(cv::Mat* cv_matrix, float** result, int* result_length) {
 int main(int argc, char* argv[]) {
     int dimX = 10;  // units
     int dimY = 10;
-    int dimZ = 3;
+    int dimZ = 5;
     float resolution = 0.1;
-    int freeVoxelsMargin = 1;
-    int robotVoxelsHeight = 2;
-    int numPoints = 10;
+    int freeVoxelsMargin = 0;
+    int robotVoxelsHeight = 4;
+    int numPoints = 50;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -35,64 +35,49 @@ int main(int argc, char* argv[]) {
         numPoints = std::stoi(argv[7]);
     }
 
+    Point ori;
+    ori.x = 0.0;
+    ori.y = 0.0;
+    ori.z = 0.0;
+
     Map* h_map = new Map;
     initMap(h_map, dimX, dimY, dimZ, resolution, freeVoxelsMargin, robotVoxelsHeight);
 
-    int cooInv[2];
-
-    Point* h_pointcloud = new Point[3];
-    Point pt1;
-    pt1.x = -0.1;
-    pt1.y = -0.1;
-    pt1.z = 0;
-
-    Point pt2;
-    pt2.x = -0.20;
-    pt2.y = -0.20;
-    pt2.z = 0.1;
-
-    Point pt3;
-    pt3.x = 0.1;
-    pt3.y = 0.1;
-    pt3.z = 0.2;
-
-    h_pointcloud[0] = pt1;
-    h_pointcloud[1] = pt2;
-    h_pointcloud[2] = pt3;
-
-    Point ori;
-    ori.x = -0.2;
-    ori.y = -0.2;
-    ori.z = 0;
-
     Point* d_pointcloud;
 
-    initDevicePointcloud(&d_pointcloud, h_pointcloud, 3);
-    insertPointcloud(h_map, d_pointcloud, 3);
+    initDevicePointcloud(&d_pointcloud, numPoints);
+    generateRandomPointcloud(h_map, d_pointcloud, numPoints);
+    insertPointcloud(h_map, d_pointcloud, numPoints);
 
-    // pointcloudRayTracing(h_map, d_pointcloud, 3, ori);
+    pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori);
+    updateGrid2D(h_map, 0.5);
 
-    printGrid3D(h_map);
-    printGrid2D(h_map);
+    // printGrid3D(h_map);
+    // printGrid2D(h_map);
 
-    generateMeshGrid2D(h_map, "suino.obj");
+    visualizeAndSaveGrid2D(h_map, "suino.bmp", false);
+
+    // generateMeshGrid2D(h_map, "suino.obj");
 }
 
-// Point* d_pointcloud;
+// int cooInv[2];
 
-//     initDevicePointcloud(&d_pointcloud, numPoints);
-//     generateRandomPointcloud(h_map, d_pointcloud, numPoints);
-//     insertPointcloud(h_map, d_pointcloud, numPoints);
-//     printGrid3D(h_map);
+// Point* h_pointcloud = new Point[3];
+// Point pt1;
+// pt1.x = -0.1;
+// pt1.y = -0.1;
+// pt1.z = 0.1;
 
-//     Point ori;
-//     ori.x = -0.5;
-//     ori.y = -0.5;
-//     ori.z = 0;
+// Point pt2;
+// pt2.x = -0.20;
+// pt2.y = -0.20;
+// pt2.z = 0.1;
 
-//     pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori);
-//     freeDevicePointcloud(d_pointcloud);
+// Point pt3;
+// pt3.x = 0.1;
+// pt3.y = 0.1;
+// pt3.z = 0.2;
 
-//     printGrid3D(h_map);
-
-//     freeMap(h_map);
+// h_pointcloud[0] = pt1;
+// h_pointcloud[1] = pt2;
+// h_pointcloud[2] = pt3;

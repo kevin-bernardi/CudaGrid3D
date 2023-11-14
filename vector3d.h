@@ -76,7 +76,7 @@ void checkDuplicates(Map *h_map, Point *d_pointcloud, int sizePointcloud);
 
 // Insert the points found in the cv:Mat matrix acquired by the zed camera.
 // This function accepts a converted
-void insertCvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTransform3D tf);
+void cvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTransform3D tf);
 
 // print functions
 
@@ -104,6 +104,11 @@ void generateSimpleMesh(Map *h_map, const char *path);
 
 // ray tracing
 void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Point origin);
+
+// update occupied, free and unknown cells of the 2D grid using the data from 3D grid
+void updateGrid2D(Map *h_map, float confidence);
+
+void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
 int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);

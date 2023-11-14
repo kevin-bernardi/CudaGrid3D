@@ -25,7 +25,10 @@ the signature of the function calls inside the main()
 #include <sys/time.h>
 #include <time.h>
 
+#include "CImg.h"
 #include "vector3d.h"
+
+using namespace cimg_library;
 
 #define UNKNOWN_CELL 0
 #define OCCUPIED_CELL 1
@@ -210,11 +213,6 @@ __global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, Point *
             // printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
             // printf("The point is floored to (%d, %d, %d) and added at idx %d\n", x, y, z, idx);
             d_grid_3D[idx3D] = OCCUPIED_CELL;
-
-            if (z >= freeVoxelsMargin && z < robotVoxelsHeight) {
-                int idx2D = y + x * dimY;
-                d_grid_2D[idx2D] = OCCUPIED_CELL;
-            }
 
         } else {
             // point out of bound
@@ -778,11 +776,6 @@ __device__ void insertFreePointsKernel(char *d_grid_2D, char *d_grid_3D, int dim
 
         if (idx3D < dimX * dimY * dimZ) {
             d_grid_3D[idx3D] = FREE_CELL;
-
-            if (pt.z >= zMin && pt.z < zMax) {
-                int idx2D = pt.y + pt.x * dimY;
-                d_grid_2D[idx2D] = FREE_CELL;
-            }
         }
     }
 }
@@ -938,7 +931,7 @@ void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, P
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
 
-    // parallelize everything is not feasible!
+    // parallelize everything is not memory feasible!
     // create nIterations serial jobs
     // for each job raytrace points_per_it points which is equal to sizePointcloud/nIterations
     int nIterations = 1000;
@@ -961,4 +954,105 @@ void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, P
     }
 
     cudaFree(d_visited_voxels);
+}
+
+__global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int freeVoxelsMargin, int robotVoxelsHeight, float confidence) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    int numPlaneCells = dimX * dimY;
+
+    if (tid < numPlaneCells) {
+        int countFree = 0;
+
+        int scanHeight = robotVoxelsHeight - freeVoxelsMargin;
+
+        int x = (tid / dimY);
+        int y = tid - (x * dimY);
+
+        for (int z = freeVoxelsMargin; z < robotVoxelsHeight; z++) {
+            int idx3D = y + x * dimY + z * dimX * dimY;
+
+            if (d_grid_3D[idx3D] == OCCUPIED_CELL) {
+                d_grid_2D[tid] = OCCUPIED_CELL;
+                return;
+            } else if (d_grid_3D[idx3D] == FREE_CELL) {
+                countFree++;
+            }
+        }
+
+        float freeRatio = countFree / (float)scanHeight;
+
+        if (freeRatio >= confidence) {
+            d_grid_2D[tid] = FREE_CELL;
+        } else {
+            d_grid_2D[tid] = UNKNOWN_CELL;
+        }
+    }
+}
+
+void updateGrid2D(Map *h_map, float confidence) {
+    int dimX = h_map->dimX;
+    int dimY = h_map->dimY;
+    int dimZ = h_map->dimZ;
+    int minZ = h_map->freeVoxelsMargin;
+    int maxZ = h_map->robotVoxelsHeight;
+
+    if (maxZ < minZ) {
+        return;
+    }
+
+    if (maxZ > dimZ) {
+        return;
+    }
+
+    int numCellsPlane = dimX * dimY;
+
+    int numBlocks = (numCellsPlane + 256) / 256;
+
+    updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, confidence);
+}
+
+void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show) {
+    int dimX = h_map->dimX;
+    int dimY = h_map->dimY;
+
+    int numCells = dimX * dimY;
+
+    char *h_grid = (char *)malloc(sizeof(char) * numCells);
+
+    cudaMemcpy(h_grid, h_map->d_grid_2D, sizeof(char) * numCells, cudaMemcpyDeviceToHost);
+
+    CImg<unsigned char> image(dimX, dimY, 1, 3, 0);
+    const unsigned char occupied[] = {255, 0, 0}, free[] = {0, 255, 0}, unknown[] = {138, 129, 124};
+
+    // cimg inverts x and y axis
+
+    for (int i = 0; i < dimX; i++) {
+        for (int j = 0; j < dimY; j++) {
+            int idx = j + i * dimY;
+            if (h_grid[idx] == OCCUPIED_CELL) {
+                image(j, i, 0, 0) = occupied[0];
+                image(j, i, 0, 1) = occupied[1];
+                image(j, i, 0, 2) = occupied[2];
+            } else if (h_grid[idx] == FREE_CELL) {
+                image(j, i, 0, 0) = free[0];
+                image(j, i, 0, 1) = free[1];
+                image(j, i, 0, 2) = free[2];
+            } else {
+                image(j, i, 0, 0) = unknown[0];
+                image(j, i, 0, 1) = unknown[1];
+                image(j, i, 0, 2) = unknown[2];
+            }
+        }
+    }
+
+    image.save(path);
+
+    if (show) {
+        CImgDisplay main_disp(image, "Cuda Grid 2D");
+
+        while (!main_disp.is_closed()) {
+            main_disp.wait();
+        }
+    }
 }
