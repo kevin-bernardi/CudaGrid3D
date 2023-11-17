@@ -106,9 +106,10 @@ void generateSimpleMesh(Map *h_map, const char *path);
 void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Point origin);
 
 // update occupied, free and unknown cells of the 2D grid using the data from 3D grid
-void updateGrid2D(Map *h_map, float confidence);
+void updateGrid2D(Map *h_map, int maxUnknownConfidence, int maybeOccupiedConfidence);
 
-void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show);
+// visualize the 2D Grid in a image visualizer and save the image to the specified path
+void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
 int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);

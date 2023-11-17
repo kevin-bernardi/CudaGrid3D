@@ -75,6 +75,16 @@ void initMap(Map *h_map, int dimX, int dimY, int dimZ, float resolution, int fre
     h_map->freeVoxelsMargin = freeVoxelsMargin;
     h_map->robotVoxelsHeight = robotVoxelsHeight;
 
+    if (robotVoxelsHeight < freeVoxelsMargin) {
+        printf("ERROR initMap(): robotVoxelsHeight must be higher than freeVoxelsMargin\n");
+        return;
+    }
+
+    if (robotVoxelsHeight * 1.2 > dimZ) {
+        printf("ERROR initMap(): robotVoxelsHeight * 1.2 can't be higher than dimZ\n");
+        return;
+    }
+
     int numCellsGrid2D = h_map->dimX * h_map->dimY;
     int numCellsGrid3D = h_map->dimX * h_map->dimY * h_map->dimZ;
 
@@ -956,13 +966,14 @@ void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, P
     cudaFree(d_visited_voxels);
 }
 
-__global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int freeVoxelsMargin, int robotVoxelsHeight, float confidence) {
+__global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int freeVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int maybeOccupiedConfidence) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     int numPlaneCells = dimX * dimY;
 
     if (tid < numPlaneCells) {
-        int countFree = 0;
+        int countUnknown = 0;
+        int countOccupied = 0;
 
         int scanHeight = robotVoxelsHeight - freeVoxelsMargin;
 
@@ -973,35 +984,56 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
             int idx3D = y + x * dimY + z * dimX * dimY;
 
             if (d_grid_3D[idx3D] == OCCUPIED_CELL) {
-                d_grid_2D[tid] = OCCUPIED_CELL;
-                return;
-            } else if (d_grid_3D[idx3D] == FREE_CELL) {
-                countFree++;
+                countOccupied++;
+
+                // 10% extension
+                // nt extendedScan = (scanHeight + 10) / 10;
+                // int increasePerOccupiedVoxel = (100 - maybeOccupiedConfidence) / extendedScan;
+
+                // printf("robot vx height: %d, extendedscan: %d, increase: %d\n", robotVoxelsHeight, extendedScan, increasePerOccupiedVoxel);
+
+                // for (int zExt = robotVoxelsHeight; zExt < (robotVoxelsHeight + extendedScan); zExt++) {
+                //     int idx3DExt = y + x * dimY + zExt * dimX * dimY;
+
+                //     if (d_grid_3D[idx3DExt] == OCCUPIED_CELL) {
+                //         // occupiedConfidence += increasePerOccupiedVoxel;
+                //         // printf("occupied in ext (%d, %d, %d): %d\n", x, y, zExt, occupiedConfidence);
+                //         d_grid_2D[tid] = 100;
+                //         return;
+                //     }
+                // }
+
+                // return;
+
+            } else if (d_grid_3D[idx3D] == UNKNOWN_CELL) {
+                countUnknown++;
             }
         }
 
-        float freeRatio = countFree / (float)scanHeight;
+        float unknownRatio = countUnknown / (float)scanHeight;
 
-        if (freeRatio >= confidence) {
-            d_grid_2D[tid] = FREE_CELL;
-        } else {
-            d_grid_2D[tid] = UNKNOWN_CELL;
+        int unknownConfidence = unknownRatio * maxUnknownConfidence;
+        d_grid_2D[tid] = unknownConfidence;
+
+        if (countOccupied == 1) {
+            d_grid_2D[tid] = maybeOccupiedConfidence;
+        } else if (countOccupied == 2) {
+            d_grid_2D[tid] = maybeOccupiedConfidence + (100 - maybeOccupiedConfidence) / 2;
+        } else if (countOccupied >= 2) {
+            d_grid_2D[tid] = 100;
         }
     }
 }
 
-void updateGrid2D(Map *h_map, float confidence) {
+void updateGrid2D(Map *h_map, int maxUnknownConfidence, int maybeOccupiedConfidence) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
     int minZ = h_map->freeVoxelsMargin;
     int maxZ = h_map->robotVoxelsHeight;
 
-    if (maxZ < minZ) {
-        return;
-    }
-
-    if (maxZ > dimZ) {
+    if (maxUnknownConfidence >= maybeOccupiedConfidence) {
+        printf("ERROR updateGrid2D(): maxUnknownConfidence can't be higher or equal than maybeOccupiedConfidence");
         return;
     }
 
@@ -1009,10 +1041,21 @@ void updateGrid2D(Map *h_map, float confidence) {
 
     int numBlocks = (numCellsPlane + 256) / 256;
 
-    updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, confidence);
+    updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, maxUnknownConfidence, maybeOccupiedConfidence);
+    cudaDeviceSynchronize();
 }
 
-void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show) {
+void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+    if (freeThreshold >= warningThreshold || freeThreshold >= occupiedThreshold) {
+        printf("ERROR, freeThreshold must be lower than avery other threshold\n");
+        return;
+    }
+
+    if (freeThreshold >= warningThreshold || warningThreshold >= occupiedThreshold) {
+        printf("ERROR, warningThreshold must be lower than occupiedThreshold and higher than freeThreshold \n");
+        return;
+    }
+
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
 
@@ -1023,25 +1066,33 @@ void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show) {
     cudaMemcpy(h_grid, h_map->d_grid_2D, sizeof(char) * numCells, cudaMemcpyDeviceToHost);
 
     CImg<unsigned char> image(dimX, dimY, 1, 3, 0);
-    const unsigned char occupied[] = {255, 0, 0}, free[] = {0, 255, 0}, unknown[] = {138, 129, 124};
+
+    const unsigned char free[] = {0, 255, 0};
+    const unsigned char unknown[] = {138, 129, 124};
+    const unsigned char warning[] = {255, 160, 0};
+    const unsigned char occupied[] = {155, 0, 0};
 
     // cimg inverts x and y axis
 
     for (int i = 0; i < dimX; i++) {
         for (int j = 0; j < dimY; j++) {
             int idx = j + i * dimY;
-            if (h_grid[idx] == OCCUPIED_CELL) {
-                image(j, i, 0, 0) = occupied[0];
-                image(j, i, 0, 1) = occupied[1];
-                image(j, i, 0, 2) = occupied[2];
-            } else if (h_grid[idx] == FREE_CELL) {
+            if (h_grid[idx] <= freeThreshold) {
                 image(j, i, 0, 0) = free[0];
                 image(j, i, 0, 1) = free[1];
                 image(j, i, 0, 2) = free[2];
-            } else {
+            } else if (h_grid[idx] > freeThreshold && h_grid[idx] < warningThreshold) {
                 image(j, i, 0, 0) = unknown[0];
                 image(j, i, 0, 1) = unknown[1];
                 image(j, i, 0, 2) = unknown[2];
+            } else if (h_grid[idx] >= warningThreshold && h_grid[idx] < occupiedThreshold) {
+                image(j, i, 0, 0) = warning[0];
+                image(j, i, 0, 1) = warning[1];
+                image(j, i, 0, 2) = warning[2];
+            } else {
+                image(j, i, 0, 0) = occupied[0];
+                image(j, i, 0, 1) = occupied[1];
+                image(j, i, 0, 2) = occupied[2];
             }
         }
     }

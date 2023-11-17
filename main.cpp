@@ -17,13 +17,13 @@ void cvMatToArray(cv::Mat* cv_matrix, float** result, int* result_length) {
 }
 
 int main(int argc, char* argv[]) {
-    int dimX = 10;  // units
-    int dimY = 10;
-    int dimZ = 5;
+    int dimX = 5;  // units
+    int dimY = 5;
+    int dimZ = 40;
     float resolution = 0.1;
-    int freeVoxelsMargin = 0;
-    int robotVoxelsHeight = 4;
-    int numPoints = 50;
+    int freeVoxelsMargin = 1;
+    int robotVoxelsHeight = 20;
+    int numPoints = 200;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -33,6 +33,8 @@ int main(int argc, char* argv[]) {
         freeVoxelsMargin = std::stof(argv[5]);
         robotVoxelsHeight = std::stof(argv[6]);
         numPoints = std::stoi(argv[7]);
+
+        std::cout << "started with arguments" << std::endl;
     }
 
     Point ori;
@@ -50,12 +52,12 @@ int main(int argc, char* argv[]) {
     insertPointcloud(h_map, d_pointcloud, numPoints);
 
     pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori);
-    updateGrid2D(h_map, 0.5);
+    updateGrid2D(h_map, 50, 75);
 
     // printGrid3D(h_map);
-    // printGrid2D(h_map);
+    printGrid2D(h_map);
 
-    visualizeAndSaveGrid2D(h_map, "suino.bmp", false);
+    visualizeAndSaveGrid2D(h_map, "suino.bmp", false, 10, 55, 85);
 
     // generateMeshGrid2D(h_map, "suino.obj");
 }
