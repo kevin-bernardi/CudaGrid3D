@@ -8,8 +8,8 @@ device variable/code/function... -> variable/code/function... allocated on GPU +
 d_variable -> variable allocated on the device (it is not mandatory, just to remember where a variable is allocated)
 h_variable -> variable allocated on the host
 
-kernel functions (with the __global__ void before the name of the function) are not commented because are called by wrapper host functions (which are commented) to simplify
-the signature of the function calls inside the main()
+kernel functions (with the __global__ void before the name of the function) are not described because are called by wrapper host functions (which are described) to simplify
+the signature of the function calls from outside the library
 
 */
 
@@ -26,7 +26,7 @@ the signature of the function calls inside the main()
 #include <time.h>
 
 #include "CImg.h"
-#include "vector3d.h"
+#include "grid3d.h"
 
 using namespace cimg_library;
 

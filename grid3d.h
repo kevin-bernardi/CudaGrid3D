@@ -1,5 +1,5 @@
-#ifndef VECTOR3D_H
-#define VECTOR3D_H
+#ifndef GRID3D_H
+#define GRID3D_H
 
 // #include <opencv2/core/mat.hpp>
 

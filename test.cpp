@@ -1,19 +1,12 @@
 #include <sys/time.h>
 
 #include <iostream>
-#include <opencv2/core/mat.hpp>
 
-#include "vector3d.h"
+#include "grid3d.h"
 
 float getTimeDifference(timeval t1, timeval t2) {
     float diff = ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000.0;
     return diff;
-}
-
-void cvMatToArray(cv::Mat* cv_matrix, float** result, int* result_length) {
-    // convert cv::Mat to classic C array
-    *result = cv_matrix->isContinuous() ? (float*)cv_matrix->data : (float*)cv_matrix->clone().data;
-    *result_length = cv_matrix->total() * cv_matrix->channels();
 }
 
 int main(int argc, char* argv[]) {
@@ -57,7 +50,7 @@ int main(int argc, char* argv[]) {
     // printGrid3D(h_map);
     printGrid2D(h_map);
 
-    visualizeAndSaveGrid2D(h_map, "suino.bmp", false, 10, 55, 85);
+    visualizeAndSaveGrid2D(h_map, "map2d.bmp", false, 10, 55, 85);
 
     // generateMeshGrid2D(h_map, "suino.obj");
 }
