@@ -242,7 +242,7 @@ void insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud) {
     // printf("Size of pointcloud: %d\n", sizePointcloud);
 
     insertPointcloudKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, d_pointcloud, sizePointcloud, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->resolution, h_map->freeVoxelsMargin, h_map->robotVoxelsHeight);
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 void initDevicePointcloud(Point **d_pointcloud, int length) {
@@ -305,7 +305,7 @@ void generateRandomPointcloud(Map *h_map, Point *pointcloud, int sizePointcloud)
 
     cudaFree(d_state);
 
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 __global__ void checkDuplicatesKernel(Point *pointcloud, int *pointcloudIntIdx, int numPoints, int dimX, int dimY, int dimZ, float resolution) {
@@ -768,7 +768,7 @@ void cvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, Cud
     // free device memory
     cudaFree(d_cvmat_arr);
 
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 __device__ void printVisitedVoxelsRT(Point *arr, int start, int len) {
@@ -956,7 +956,11 @@ void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, P
 
     Point *d_visited_voxels;
     // cudaMalloc only of the space required by a single serial job
-    cudaMalloc(&d_visited_voxels, points_per_it * sizeof(Point) * maxTraversedVoxelsPerRay);
+    cudaError_t status = cudaMalloc(&d_visited_voxels, points_per_it * sizeof(Point) * maxTraversedVoxelsPerRay);
+
+    if (status != cudaSuccess) {
+        printf("ERROR cudaMalloc rayTracing!\n");
+    }
 
     for (int i = 0; i < nIterations; i++) {
         int numBlocks = (points_per_it + 256) / 256;
@@ -1042,7 +1046,7 @@ void updateGrid2D(Map *h_map, int maxUnknownConfidence, int maybeOccupiedConfide
     int numBlocks = (numCellsPlane + 256) / 256;
 
     updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, maxUnknownConfidence, maybeOccupiedConfidence);
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold) {
