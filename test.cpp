@@ -10,13 +10,13 @@ float getTimeDifference(timeval t1, timeval t2) {
 }
 
 int main(int argc, char* argv[]) {
-    int dimX = 5;  // units
-    int dimY = 5;
-    int dimZ = 40;
+    int dimX = 20;  // units
+    int dimY = 20;
+    int dimZ = 20;
     float resolution = 0.1;
     int freeVoxelsMargin = 1;
-    int robotVoxelsHeight = 20;
-    int numPoints = 200;
+    int robotVoxelsHeight = 10;
+    int numPoints = 2000;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
     updateGrid2D(h_map, 50, 75);
 
     // printGrid3D(h_map);
-    printGrid2D(h_map);
+    // printGrid2D(h_map);
 
     visualizeAndSaveGrid2D(h_map, "map2d.bmp", false, 10, 55, 85);
 

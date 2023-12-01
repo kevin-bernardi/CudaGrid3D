@@ -2,7 +2,6 @@
 #define GRID3D_H
 
 // #include <opencv2/core/mat.hpp>
-
 // #include "star/robotics/math/Transform3D.hpp"
 
 class Map {
@@ -78,20 +77,30 @@ void checkDuplicates(Map *h_map, Point *d_pointcloud, int sizePointcloud);
 // This function accepts a converted
 void cvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTransform3D tf);
 
-// print functions
+// ----- print functions -----
 
-// print 2D grid
+// print 2D Grid
 void printGrid2DHost(bool *h_grid_2D, int dimx, int dimy);
+
+// print the 2D Grid on a line (as it really is in the memory)
 void printLinearGrid2D(Map *h_map);
+
+// print the 2D Grid
 void printGrid2D(Map *h_map);
 
-// print 3d grid
+// print host 3D Grid
 void printGrid3DHost(bool *h_grid_3D, int dimx, int dimy, int dimz);
+
+// print device 3D Grid on a line (as it really is in the memory)
 void printLinearGrid3D(Map *h_map);
+
+// print device 3D Grid as many 2D planes
 void printGrid3D(Map *h_map);
 
 // print device pointcloud
 void printPointcloud(Point *d_pointcloud, int sizePointcloud);
+
+// ------------------------
 
 // functions for 3D mesh generation (.obj)
 void vertex(FILE *file, float x, float y, float z);
@@ -102,13 +111,20 @@ void generateMeshGrid2D(Map *h_map, const char *path);
 void generateMesh(Map *h_map, const char *path);
 void generateSimpleMesh(Map *h_map, const char *path);
 
-// ray tracing
+// ------------------------
+
+// ray tracing to find free cells
+// rays starts at origin and ends at the first encountered obstacle in its own direction
 void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Point origin);
 
 // update occupied, free and unknown cells of the 2D grid using the data from 3D grid
-void updateGrid2D(Map *h_map, int maxUnknownConfidence, int maybeOccupiedConfidence);
+// maxUnknownConfidence is the confidence set if every voxel inside the height interval of the robot
+// is unknown
+// minOccupiedConfidence is the confidence set if only one voxel is found in the height interval of the robot
+void updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidence);
 
-// visualize the 2D Grid in a image visualizer and save the image to the specified path
+// create an image based on the data from the 2D Grid, save it at the specified path
+// if show is true also visualize the image
 void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
