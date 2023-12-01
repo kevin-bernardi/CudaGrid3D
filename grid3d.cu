@@ -409,7 +409,6 @@ __global__ void printLinearGrid2DKernel(char *d_grid_2D, int numCells) {
     printf("\n");
 }
 
-// print the grid on a line (as it really is in the memory)
 void printLinearGrid2D(Map *h_map) {
     int numCells = h_map->dimX * h_map->dimY;
 
@@ -431,7 +430,6 @@ __global__ void printLinearGrid3DKernel(char *d_grid_3D, int numCells) {
     printf("\n");
 }
 
-// print the grid on a line (as it really is in the memory)
 void printLinearGrid3D(Map *h_map) {
     int numCells = h_map->dimX * h_map->dimY * h_map->dimZ;
 
@@ -791,7 +789,7 @@ __device__ void insertFreePointsKernel(char *d_grid_2D, char *d_grid_3D, int dim
 }
 
 __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, Point pt) {
-    // point with positive integer like coordinates (coordinates of the cell, not the point in meters)
+    // point with positive integer coordinates (coordinates of the cell, not the point in meters)
     if (pt.x < dimX && pt.y < dimY && pt.z < dimZ && pt.x >= 0 && pt.y >= 0 && pt.z >= 0) {
         return true;
     }
@@ -928,7 +926,7 @@ __global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_
             array_idx++;
         }
         // printf("array idx: %d\n", array_idx);
-        //  printVisitedVoxels(d_visited_voxels, d_vst_idx, array_idx);
+        // printVisitedVoxels(d_visited_voxels, d_vst_idx, array_idx);
 
         insertFreePointsKernel(d_grid_2D, d_grid_3D, dimX, dimY, dimZ, d_visited_voxels, d_vst_idx, array_idx, minZ, maxZ);
     }
@@ -949,7 +947,8 @@ void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, P
 
     // security factor
     // the number of traversed voxels is equal to the number of traversed voxels by the longest possible ray which is
-    // the diagonal of the 3D grid (= sqrt(a^2+b^2+c^2)) multiplied by a security factor (the number of traversed voxel by a ray is AT LEAST equal to the length of the ray expressed in number of voxels)
+    // the diagonal of the 3D grid (= sqrt(a^2+b^2+c^2)) multiplied by a security factor
+    // (the number of traversed voxel by a ray is AT LEAST equal to the length of the ray expressed in number of voxels)
     int diagonal = floor(sqrt(dimX * dimX + dimY * dimY + dimZ * dimZ));
     int spaceFactor = 10;
     int maxTraversedVoxelsPerRay = spaceFactor * diagonal;
@@ -966,11 +965,11 @@ void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, P
         int numBlocks = (points_per_it + 256) / 256;
         rayTracingKernel<<<numBlocks, 256>>>(d_visited_voxels, i, points_per_it, h_map->d_grid_2D, h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ, maxTraversedVoxelsPerRay, h_map->resolution, d_pointcloud, sizePointcloud, origin, h_map->freeVoxelsMargin, h_map->robotVoxelsHeight);
     }
-
+    cudaDeviceSynchronize();
     cudaFree(d_visited_voxels);
 }
 
-__global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int freeVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int maybeOccupiedConfidence) {
+__global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int freeVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int minOccupiedConfidence) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     int numPlaneCells = dimX * dimY;
@@ -991,7 +990,7 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
                 countOccupied++;
 
                 // 10% extension
-                // nt extendedScan = (scanHeight + 10) / 10;
+                // int extendedScan = (scanHeight + 10) / 10;
                 // int increasePerOccupiedVoxel = (100 - maybeOccupiedConfidence) / extendedScan;
 
                 // printf("robot vx height: %d, extendedscan: %d, increase: %d\n", robotVoxelsHeight, extendedScan, increasePerOccupiedVoxel);
@@ -1016,28 +1015,34 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
 
         float unknownRatio = countUnknown / (float)scanHeight;
 
+        // unknownConfidence is capped at maxUnknownConfidence
         int unknownConfidence = unknownRatio * maxUnknownConfidence;
         d_grid_2D[tid] = unknownConfidence;
 
         if (countOccupied == 1) {
-            d_grid_2D[tid] = maybeOccupiedConfidence;
+            // only one voxel is occupied
+            d_grid_2D[tid] = minOccupiedConfidence;
         } else if (countOccupied == 2) {
-            d_grid_2D[tid] = maybeOccupiedConfidence + (100 - maybeOccupiedConfidence) / 2;
+            // 2 voxels are occipied: set the confidence at the mid of minOccupiedConfidence
+            // and maxOccupiedConfidence (100)
+            d_grid_2D[tid] = minOccupiedConfidence + (100 - minOccupiedConfidence) / 2;
         } else if (countOccupied >= 2) {
+            // more than 2 voxels are occupied, set maximum confidence (100)
             d_grid_2D[tid] = 100;
         }
     }
 }
 
-void updateGrid2D(Map *h_map, int maxUnknownConfidence, int maybeOccupiedConfidence) {
+void updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidence) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
     int minZ = h_map->freeVoxelsMargin;
     int maxZ = h_map->robotVoxelsHeight;
 
-    if (maxUnknownConfidence >= maybeOccupiedConfidence) {
-        printf("ERROR updateGrid2D(): maxUnknownConfidence can't be higher or equal than maybeOccupiedConfidence");
+    // maxUnknownConfidence must be lower than minOccupiedConfidence
+    if (maxUnknownConfidence >= minOccupiedConfidence) {
+        printf("ERROR updateGrid2D(): maxUnknownConfidence can't be higher or equal than minOccupiedConfidence");
         return;
     }
 
@@ -1045,13 +1050,15 @@ void updateGrid2D(Map *h_map, int maxUnknownConfidence, int maybeOccupiedConfide
 
     int numBlocks = (numCellsPlane + 256) / 256;
 
-    updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, maxUnknownConfidence, maybeOccupiedConfidence);
+    updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, maxUnknownConfidence, minOccupiedConfidence);
     // cudaDeviceSynchronize();
 }
 
 void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+    // the following condition must be true: freeThreshold < warningThreshold < occupiedThreshold
+
     if (freeThreshold >= warningThreshold || freeThreshold >= occupiedThreshold) {
-        printf("ERROR, freeThreshold must be lower than avery other threshold\n");
+        printf("ERROR, freeThreshold must be lower than both warningThreshold and occupiedThreshold\n");
         return;
     }
 
@@ -1065,35 +1072,53 @@ void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThr
 
     int numCells = dimX * dimY;
 
+    // allocate the space on the host for the 2D grid
     char *h_grid = (char *)malloc(sizeof(char) * numCells);
 
+    // to read the image on the host i first need to transfer the 2D Grid on the host
+
+    // transfer the grid from the device to the host
     cudaMemcpy(h_grid, h_map->d_grid_2D, sizeof(char) * numCells, cudaMemcpyDeviceToHost);
 
+    // create an image of size dimX x dimY with 3 channels (for RGB color)
     CImg<unsigned char> image(dimX, dimY, 1, 3, 0);
 
+    // green for free cells
     const unsigned char free[] = {0, 255, 0};
+
+    // grey for unknown cells
     const unsigned char unknown[] = {138, 129, 124};
+
+    // orange for maybe occupied cells
     const unsigned char warning[] = {255, 160, 0};
+
+    // red for occupied cells
     const unsigned char occupied[] = {155, 0, 0};
 
     // cimg inverts x and y axis
 
+    // scan the 2D grid and create a colored 2D grid image
     for (int i = 0; i < dimX; i++) {
         for (int j = 0; j < dimY; j++) {
             int idx = j + i * dimY;
+            // use a different color based on the confidence value found in the cell
             if (h_grid[idx] <= freeThreshold) {
+                // use green
                 image(j, i, 0, 0) = free[0];
                 image(j, i, 0, 1) = free[1];
                 image(j, i, 0, 2) = free[2];
             } else if (h_grid[idx] > freeThreshold && h_grid[idx] < warningThreshold) {
+                // use grey
                 image(j, i, 0, 0) = unknown[0];
                 image(j, i, 0, 1) = unknown[1];
                 image(j, i, 0, 2) = unknown[2];
             } else if (h_grid[idx] >= warningThreshold && h_grid[idx] < occupiedThreshold) {
+                // use orange
                 image(j, i, 0, 0) = warning[0];
                 image(j, i, 0, 1) = warning[1];
                 image(j, i, 0, 2) = warning[2];
             } else {
+                // use red
                 image(j, i, 0, 0) = occupied[0];
                 image(j, i, 0, 1) = occupied[1];
                 image(j, i, 0, 2) = occupied[2];
@@ -1101,11 +1126,14 @@ void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThr
         }
     }
 
+    // save the image at the specified path
     image.save(path);
 
     if (show) {
+        // create a window that displays the image just created
         CImgDisplay main_disp(image, "Cuda Grid 2D");
 
+        // wait until the user manually close the window
         while (!main_disp.is_closed()) {
             main_disp.wait();
         }
