@@ -4,6 +4,8 @@
 // #include <opencv2/core/mat.hpp>
 // #include "star/robotics/math/Transform3D.hpp"
 
+namespace CudaGrid3D {
+
 class Map {
    public:
     char *d_grid_3D;
@@ -80,7 +82,7 @@ void cvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTra
 // ----- print functions -----
 
 // print 2D Grid
-void printGrid2DHost(bool *h_grid_2D, int dimx, int dimy);
+void printGrid2DHost(char *h_grid_2D, int dimx, int dimy);
 
 // print the 2D Grid on a line (as it really is in the memory)
 void printLinearGrid2D(Map *h_map);
@@ -89,7 +91,7 @@ void printLinearGrid2D(Map *h_map);
 void printGrid2D(Map *h_map);
 
 // print host 3D Grid
-void printGrid3DHost(bool *h_grid_3D, int dimx, int dimy, int dimz);
+void printGrid3DHost(char *h_grid_3D, int dimx, int dimy, int dimz);
 
 // print device 3D Grid on a line (as it really is in the memory)
 void printLinearGrid3D(Map *h_map);
@@ -103,10 +105,11 @@ void printPointcloud(Point *d_pointcloud, int sizePointcloud);
 // ------------------------
 
 // functions for 3D mesh generation (.obj)
-void vertex(FILE *file, float x, float y, float z);
-void face(FILE *file, int v1, int v2, int v3);
-void cubeVertex(FILE *file, float res, float x, float y, float z);
-void cubeFace(FILE *file, int nCube);
+// void vertex(FILE *file, float x, float y, float z);
+// void face(FILE *file, int v1, int v2, int v3);
+// void cubeVertex(FILE *file, float res, float x, float y, float z);
+// void cubeFace(FILE *file, int nCube);
+
 void generateMeshGrid2D(Map *h_map, const char *path);
 void generateMesh(Map *h_map, const char *path);
 void generateSimpleMesh(Map *h_map, const char *path);
@@ -123,11 +126,17 @@ void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Poi
 // minOccupiedConfidence is the confidence set if only one voxel is found in the height interval of the robot
 void updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidence);
 
+// TODO:
+// grid 2s binning
+void gridBinning(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold);
+
 // create an image based on the data from the 2D Grid, save it at the specified path
 // if show is true also visualize the image
 void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
 int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);
+
+}  // namespace CudaGrid3D
 
 #endif

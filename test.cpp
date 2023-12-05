@@ -10,13 +10,13 @@ float getTimeDifference(timeval t1, timeval t2) {
 }
 
 int main(int argc, char* argv[]) {
-    int dimX = 20;  // units
-    int dimY = 20;
-    int dimZ = 20;
+    int dimX = 10;  // units
+    int dimY = 10;
+    int dimZ = 10;
     float resolution = 0.1;
     int freeVoxelsMargin = 1;
-    int robotVoxelsHeight = 10;
-    int numPoints = 2000;
+    int robotVoxelsHeight = 5;
+    int numPoints = 1000;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -30,15 +30,15 @@ int main(int argc, char* argv[]) {
         std::cout << "started with arguments" << std::endl;
     }
 
-    Point ori;
+    CudaGrid3D::Point ori;
     ori.x = 0.0;
     ori.y = 0.0;
     ori.z = 0.0;
 
-    Map* h_map = new Map;
+    CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
     initMap(h_map, dimX, dimY, dimZ, resolution, freeVoxelsMargin, robotVoxelsHeight);
 
-    Point* d_pointcloud;
+    CudaGrid3D::Point* d_pointcloud;
 
     initDevicePointcloud(&d_pointcloud, numPoints);
     generateRandomPointcloud(h_map, d_pointcloud, numPoints);
@@ -48,9 +48,10 @@ int main(int argc, char* argv[]) {
     updateGrid2D(h_map, 50, 75);
 
     // printGrid3D(h_map);
-    // printGrid2D(h_map);
+    printGrid2D(h_map);
 
     visualizeAndSaveGrid2D(h_map, "map2d.bmp", false, 10, 55, 85);
+    CudaGrid3D::gridBinning(h_map, 4, 10, 85);
 
     // generateMeshGrid2D(h_map, "suino.obj");
 }

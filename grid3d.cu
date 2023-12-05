@@ -67,7 +67,7 @@ __global__ void initMapKernel(char *d_grid_2D, char *d_grid_3D, int numCellsGrid
 }
 
 // initialize 3d grid, make every cell false
-void initMap(Map *h_map, int dimX, int dimY, int dimZ, float resolution, int freeVoxelsMargin, int robotVoxelsHeight) {
+void CudaGrid3D::initMap(Map *h_map, int dimX, int dimY, int dimZ, float resolution, int freeVoxelsMargin, int robotVoxelsHeight) {
     h_map->dimX = dimX;
     h_map->dimY = dimY;
     h_map->dimZ = dimZ;
@@ -110,12 +110,12 @@ void initMap(Map *h_map, int dimX, int dimY, int dimZ, float resolution, int fre
 }
 
 // free vector space
-void freeMap(Map *h_map) {
+void CudaGrid3D::freeMap(Map *h_map) {
     cudaFree(h_map->d_grid_3D);
     free(h_map);
 }
 
-void getCoordinatesInv3D(Map *h_map, int index, int *result) {
+void CudaGrid3D::getCoordinatesInv3D(Map *h_map, int index, int *result) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
@@ -141,7 +141,7 @@ void getCoordinatesInv3D(Map *h_map, int index, int *result) {
     return;
 }
 
-void getCoordinatesInv2D(Map *h_map, int index, int *result) {
+void CudaGrid3D::getCoordinatesInv2D(Map *h_map, int index, int *result) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
 
@@ -163,7 +163,7 @@ void getCoordinatesInv2D(Map *h_map, int index, int *result) {
 }
 
 // input 3 coordinates (x,y,z) of the cell in the 3D grid and get the linear index
-int getLinearIndex3D(Map *h_map, int x, int y, int z) {
+int CudaGrid3D::getLinearIndex3D(Map *h_map, int x, int y, int z) {
     if (x < h_map->dimX && y < h_map->dimY && z < h_map->dimZ) {
         int result = y + x * h_map->dimY + z * h_map->dimX * h_map->dimY;
         return result;
@@ -175,7 +175,7 @@ int getLinearIndex3D(Map *h_map, int x, int y, int z) {
 }
 
 // input 2 coordinates (x,y) of the cell in the 2D grid and get the linear index
-int getLinearIndex2D(Map *h_map, int x, int y) {
+int CudaGrid3D::getLinearIndex2D(Map *h_map, int x, int y) {
     if (x < h_map->dimX && y < h_map->dimY) {
         int result = y + x * h_map->dimY;
         return result;
@@ -186,12 +186,12 @@ int getLinearIndex2D(Map *h_map, int x, int y) {
     }
 }
 
-__global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, Point *pointcloud, int n, int dimX, int dimY, int dimZ, float resolution, int freeVoxelsMargin, int robotVoxelsHeight) {
+__global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGrid3D::Point *pointcloud, int n, int dimX, int dimY, int dimZ, float resolution, int freeVoxelsMargin, int robotVoxelsHeight) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     // check if point is within the pointcloud vector of lenght n
     if (tid < n) {
-        Point pt = pointcloud[tid];
+        CudaGrid3D::Point pt = pointcloud[tid];
         // check if point is within bounds (correct coordinates)
 
         float numCellRawX = pt.x / resolution;
@@ -232,7 +232,7 @@ __global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, Point *
 }
 
 // insert a pointcloud (array of points (x,y,z)) in the 3D grid
-void insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud) {
+void CudaGrid3D::insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud) {
     if (sizePointcloud <= 0) {
         printf("insertPointcloud() ERROR! sizePointcloud is not valid!\n");
         return;
@@ -245,21 +245,21 @@ void insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud) {
     // cudaDeviceSynchronize();
 }
 
-void initDevicePointcloud(Point **d_pointcloud, int length) {
+void CudaGrid3D::initDevicePointcloud(Point **d_pointcloud, int length) {
     cudaMalloc((void **)d_pointcloud, sizeof(Point) * length);
 }
 
-void initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int length) {
+void CudaGrid3D::initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int length) {
     cudaMalloc((void **)d_pointcloud, sizeof(Point) * length);
 
     cudaMemcpy(*d_pointcloud, h_pointcloud, sizeof(Point) * length, cudaMemcpyHostToDevice);
 }
 
-void freeDevicePointcloud(Point *d_pointcloud) {
+void CudaGrid3D::freeDevicePointcloud(Point *d_pointcloud) {
     cudaFree(d_pointcloud);
 }
 
-__global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *state, int dimX, int dimY, int dimZ, float resolution) {
+__global__ void generateRandomPcKernel(CudaGrid3D::Point *pointcloud, int n, curandState *state, int dimX, int dimY, int dimZ, float resolution) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     float dimX_meters = dimX * resolution;
@@ -277,7 +277,7 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
         float y = (curand_uniform(&(state[tid])) * dimY_meters) - (dimY_meters / 2.0);
         float z = (curand_uniform(&(state[tid])) * dimZ_meters);
 
-        Point pt;
+        CudaGrid3D::Point pt;
         pt.x = x;
         pt.y = y;
         pt.z = z;
@@ -292,7 +292,7 @@ __global__ void generateRandomPcKernel(Point *pointcloud, int n, curandState *st
     }
 }
 
-void generateRandomPointcloud(Map *h_map, Point *pointcloud, int sizePointcloud) {
+void CudaGrid3D::generateRandomPointcloud(Map *h_map, Point *pointcloud, int sizePointcloud) {
     int numBlocks = (sizePointcloud + 256) / 256;
 
     // state for the generation of random numbers in kernel code
@@ -308,9 +308,9 @@ void generateRandomPointcloud(Map *h_map, Point *pointcloud, int sizePointcloud)
     // cudaDeviceSynchronize();
 }
 
-__global__ void checkDuplicatesKernel(Point *pointcloud, int *pointcloudIntIdx, int numPoints, int dimX, int dimY, int dimZ, float resolution) {
+__global__ void checkDuplicatesKernel(CudaGrid3D::Point *pointcloud, int *pointcloudIntIdx, int numPoints, int dimX, int dimY, int dimZ, float resolution) {
     for (int i = 0; i < numPoints; i++) {
-        Point pt = pointcloud[i];
+        CudaGrid3D::Point pt = pointcloud[i];
         int x = floor(pt.x / resolution);
         int y = floor(pt.y / resolution);
         int z = floor(pt.z / resolution);
@@ -339,7 +339,7 @@ __global__ void checkDuplicatesKernel(Point *pointcloud, int *pointcloudIntIdx, 
 }
 
 // check if there are duplicate points in the pointcloud (points with the same x,y,z coordinates)
-void checkDuplicates(Map *h_map, Point *pointcloud, int sizePointcloud) {
+void CudaGrid3D::checkDuplicates(Map *h_map, Point *pointcloud, int sizePointcloud) {
     int *d_pointcloudIntIdx;
 
     cudaMalloc((void **)&d_pointcloudIntIdx, sizeof(int) * sizePointcloud);
@@ -349,7 +349,7 @@ void checkDuplicates(Map *h_map, Point *pointcloud, int sizePointcloud) {
 }
 
 // same as printGrid2D but for grids allocated on the host
-void printGrid2DHost(char *h_grid_2D, int dimx, int dimy) {
+void CudaGrid3D::printGrid2DHost(char *h_grid_2D, int dimx, int dimy) {
     if (dimx * dimy <= 0) {
         printf("ERROR! Empty Grid\n");
         return;
@@ -373,7 +373,7 @@ void printGrid2DHost(char *h_grid_2D, int dimx, int dimy) {
 }
 
 // same as printGrid but for grids allocated on the host
-void printGrid3DHost(char *h_grid_3D, int dimx, int dimy, int dimz) {
+void CudaGrid3D::printGrid3DHost(char *h_grid_3D, int dimx, int dimy, int dimz) {
     if (dimx * dimy * dimz <= 0) {
         printf("ERROR! Empty Grid\n");
         return;
@@ -409,7 +409,7 @@ __global__ void printLinearGrid2DKernel(char *d_grid_2D, int numCells) {
     printf("\n");
 }
 
-void printLinearGrid2D(Map *h_map) {
+void CudaGrid3D::printLinearGrid2D(Map *h_map) {
     int numCells = h_map->dimX * h_map->dimY;
 
     if (numCells <= 0) {
@@ -430,7 +430,7 @@ __global__ void printLinearGrid3DKernel(char *d_grid_3D, int numCells) {
     printf("\n");
 }
 
-void printLinearGrid3D(Map *h_map) {
+void CudaGrid3D::printLinearGrid3D(Map *h_map) {
     int numCells = h_map->dimX * h_map->dimY * h_map->dimZ;
 
     if (numCells <= 0) {
@@ -465,7 +465,7 @@ __global__ void printGrid2DKernel(char *d_grid_2D, int dimX, int dimY) {
 }
 
 // print the 2D grid
-void printGrid2D(Map *h_map) {
+void CudaGrid3D::printGrid2D(Map *h_map) {
     printGrid2DKernel<<<1, 1>>>(h_map->d_grid_2D, h_map->dimX, h_map->dimY);
     cudaDeviceSynchronize();
 }
@@ -497,20 +497,20 @@ __global__ void printGrid3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ)
 }
 
 // print the 3D grid in many 2D planes (dimZ 2D planes of size dimX x dimY)
-void printGrid3D(Map *h_map) {
+void CudaGrid3D::printGrid3D(Map *h_map) {
     printGrid3DKernel<<<1, 1>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ);
     cudaDeviceSynchronize();
 }
 
-__global__ void printPcKernel(Point *pointcloud, int sizePointcloud) {
+__global__ void printPcKernel(CudaGrid3D::Point *pointcloud, int sizePointcloud) {
     for (int i = 0; i < sizePointcloud; i++) {
-        Point pt = pointcloud[i];
+        CudaGrid3D::Point pt = pointcloud[i];
         printf("Point %d: (%f,%f,%f)\n", i, pt.x, pt.y, pt.z);
     }
 }
 
 // print the list of points inside the pointcloud
-void printPointcloud(Point *pointcloud, int sizePointcloud) {
+void CudaGrid3D::printPointcloud(Point *pointcloud, int sizePointcloud) {
     printf("\n\nPointcloud Output (DEVICE)\n");
     printPcKernel<<<1, 1>>>(pointcloud, sizePointcloud);
     cudaDeviceSynchronize();
@@ -571,7 +571,7 @@ void cubeFace(FILE *file, int nCube) {
     face(file, i + 1, i + 7, i + 3);
 }
 
-void generateMeshGrid2D(Map *h_map, const char *path) {
+void CudaGrid3D::generateMeshGrid2D(Map *h_map, const char *path) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
 
@@ -615,7 +615,7 @@ void generateMeshGrid2D(Map *h_map, const char *path) {
     free(h_grid);
 }
 
-void generateMesh(Map *h_map, const char *path) {
+void CudaGrid3D::generateMesh(Map *h_map, const char *path) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
@@ -669,7 +669,7 @@ void generateMesh(Map *h_map, const char *path) {
     free(h_grid);
 }
 
-void generateSimpleMesh(Map *h_map, const char *path) {
+void CudaGrid3D::generateSimpleMesh(Map *h_map, const char *path) {
     float dimX = h_map->dimX;
     float dimY = h_map->dimY;
     float dimZ = h_map->dimZ;
@@ -708,7 +708,7 @@ void generateSimpleMesh(Map *h_map, const char *path) {
     free(h_grid);
 }
 
-__global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int length, CudaTransform3D tf) {
+__global__ void arrToPointcloudKernel(CudaGrid3D::Point *d_pointcloud, float *d_arr, int length, CudaGrid3D::CudaTransform3D tf) {
     int tid = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
 
     if (tid < length) {
@@ -719,13 +719,13 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
         z = d_arr[tid + 2];
 
         if (!isnan(x) && !isnan(y) && !isnan(z) && !isinf(x) && !isinf(y) && !isinf(z)) {
-            Point point;
+            CudaGrid3D::Point point;
 
             point.x = x;
             point.y = y;
             point.z = z;
 
-            Point res;
+            CudaGrid3D::Point res;
 
             // rototranslate point
             res.x = tf.tra[0] + tf.rot[0][0] * point.x + tf.rot[0][1] * point.y + tf.rot[0][2] * point.z;
@@ -748,7 +748,7 @@ __global__ void arrToPointcloudKernel(Point *d_pointcloud, float *d_arr, int len
     }
 }
 
-void cvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, CudaTransform3D tf) {
+void CudaGrid3D::cvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, CudaTransform3D tf) {
     float *d_cvmat_arr;
     cudaMalloc(&d_cvmat_arr, sizeof(float) * length);
 
@@ -769,16 +769,16 @@ void cvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, Cud
     // cudaDeviceSynchronize();
 }
 
-__device__ void printVisitedVoxelsRT(Point *arr, int start, int len) {
+__device__ void printVisitedVoxelsRT(CudaGrid3D::Point *arr, int start, int len) {
     for (int i = 0; i < len; i++) {
         printf("> %f, %f, %f\n", arr[start + i].x, arr[start + i].y, arr[start + i].z);
     }
     printf("\n-------------------\n");
 }
 
-__device__ void insertFreePointsKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, Point *d_free_points, int start, int length, int zMin, int zMax) {
+__device__ void insertFreePointsKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, CudaGrid3D::Point *d_free_points, int start, int length, int zMin, int zMax) {
     for (int i = 1; i < length; i++) {
-        Point pt = d_free_points[start + i];
+        CudaGrid3D::Point pt = d_free_points[start + i];
 
         int idx3D = pt.y + pt.x * dimY + pt.z * dimX * dimY;
 
@@ -788,7 +788,7 @@ __device__ void insertFreePointsKernel(char *d_grid_2D, char *d_grid_3D, int dim
     }
 }
 
-__device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, Point pt) {
+__device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, CudaGrid3D::Point pt) {
     // point with positive integer coordinates (coordinates of the cell, not the point in meters)
     if (pt.x < dimX && pt.y < dimY && pt.z < dimZ && pt.x >= 0 && pt.y >= 0 && pt.z >= 0) {
         return true;
@@ -796,7 +796,7 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, Point pt) {
     return false;
 }
 
-__global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_it, char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int maxTraversedVoxelsPerRay, float resolution, Point *pointcloud, int sizePointcloud, Point ray_start, int minZ, int maxZ) {
+__global__ void rayTracingKernel(CudaGrid3D::Point *d_visited_voxels, int i, int points_per_it, char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int maxTraversedVoxelsPerRay, float resolution, CudaGrid3D::Point *pointcloud, int sizePointcloud, CudaGrid3D::Point ray_start, int minZ, int maxZ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int start_idx = i * points_per_it;
     int d_vst_idx = tid * maxTraversedVoxelsPerRay;
@@ -804,21 +804,21 @@ __global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_
     if (tid < points_per_it && (start_idx + tid) < sizePointcloud) {
         int array_idx = 0;
         float _bin_size = 1.0;
-        Point ray_end = pointcloud[start_idx + tid];
+        CudaGrid3D::Point ray_end = pointcloud[start_idx + tid];
 
         if (ray_end.x == 0.0 && ray_end.y == 0.0 && ray_end.z == 0.0) {
             return;
         }
 
         // This id of the first/current voxel hit by the ray.
-        Point current_voxel;
+        CudaGrid3D::Point current_voxel;
         current_voxel.x = approxFloatKernel(ray_start.x / resolution);
         current_voxel.y = approxFloatKernel(ray_start.y / resolution);
         current_voxel.z = approxFloatKernel(ray_start.z / resolution);
 
         // printf("current voxel: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
 
-        Point last_voxel;
+        CudaGrid3D::Point last_voxel;
         last_voxel.x = approxFloatKernel(ray_end.x / resolution);
         last_voxel.y = approxFloatKernel(ray_end.y / resolution);
         last_voxel.z = approxFloatKernel(ray_end.z / resolution);
@@ -866,7 +866,7 @@ __global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_
         }
 
         // Compute normalized ray direction.
-        Point ray;
+        CudaGrid3D::Point ray;
 
         ray.x = last_voxel.x - current_voxel.x;
         ray.y = last_voxel.y - current_voxel.y;
@@ -932,7 +932,7 @@ __global__ void rayTracingKernel(Point *d_visited_voxels, int i, int points_per_
     }
 }
 
-void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, Point origin) {
+void CudaGrid3D::pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, Point origin) {
     // int numBlocks = (sizePointcloud + 256) / 256;
 
     int dimX = h_map->dimX;
@@ -1033,7 +1033,7 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
     }
 }
 
-void updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidence) {
+void CudaGrid3D::updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidence) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
@@ -1054,7 +1054,95 @@ void updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidenc
     // cudaDeviceSynchronize();
 }
 
-void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+__global__ void binarizeGrid2DKernel(char *d_grid_2D, char *d_grid_2D_bin, int numCells, int freeThreshold, int occupiedThreshold) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (tid < numCells) {
+        char cellValue = d_grid_2D[tid];
+
+        if (cellValue <= freeThreshold) {
+            d_grid_2D_bin[tid] = FREE_CELL;
+        } else if (cellValue >= occupiedThreshold) {
+            d_grid_2D_bin[tid] = OCCUPIED_CELL;
+        } else {
+            d_grid_2D_bin[tid] = UNKNOWN_CELL;
+        }
+    }
+}
+
+__global__ void grid2DBinningKernel(char *d_grid_2d_binarized, char *d_grid_2d_binned, int dimX, int dimY, int dimX_bin, int dimY_bin, int bin_size) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (tid < dimX_bin * dimY_bin) {
+        d_grid_2d_binned[tid] = 0;
+        int x_binned = tid / dimY_bin;               // x coord of the cell in the binned grid
+        int y_binned = tid - (x_binned * dimY_bin);  // y coord of the cell in the binned grid
+
+        int x_binarized = x_binned * bin_size;
+        int y_binarized = y_binned * bin_size;
+
+        // top-left corner of the (bin_size x bin_size) subgrid of the binarized 2D grid
+
+        for (int i = 0; i < bin_size; i++) {
+            int x = x_binarized + i;
+            for (int j = 0; j < bin_size; j++) {
+                int y = y_binarized + j;
+
+                int idxGrid2D = y + x * dimY;
+                if (d_grid_2d_binarized[idxGrid2D] == UNKNOWN_CELL) {
+                    d_grid_2d_binned[tid] += 1;
+                }
+            }
+        }
+    }
+}
+
+void CudaGrid3D::gridBinning(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold) {
+    if (freeThreshold >= occupiedThreshold) {
+        printf("ERROR, freeThreshold must be lower than occupiedThreshold\n");
+        return;
+    }
+
+    if (bin_size > h_map->dimX || bin_size > h_map->dimY) {
+        printf("ERROR, bin_size must be lower or equal than the smallest dimension\n");
+        return;
+    }
+
+    // binarize grid 2D
+    char *d_grid_2D_binarized;
+
+    int numCells = h_map->dimX * h_map->dimY;
+
+    cudaMalloc(&d_grid_2D_binarized, sizeof(Point) * numCells);
+
+    int numBlocks = (numCells + 256) / 256;
+
+    binarizeGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, d_grid_2D_binarized, numCells, freeThreshold, occupiedThreshold);
+
+    char *h_grid_2D_bin = (char *)malloc(sizeof(Point) * numCells);
+    cudaMemcpy(h_grid_2D_bin, d_grid_2D_binarized, sizeof(Point) * numCells, cudaMemcpyDeviceToHost);
+    printGrid2DHost(h_grid_2D_bin, h_map->dimX, h_map->dimY);
+
+    int dimX_bin = h_map->dimX / bin_size;
+    int dimY_bin = h_map->dimY / bin_size;
+
+    int numCellsBinned = dimX_bin * dimY_bin;
+
+    char *d_grid_2D_binned;
+
+    cudaMalloc(&d_grid_2D_binned, sizeof(Point) * numCellsBinned);
+
+    int numBlocksBinning = (numCellsBinned + 256) / 256;
+
+    grid2DBinningKernel<<<numBlocksBinning, 256>>>(d_grid_2D_binarized, d_grid_2D_binned, h_map->dimX, h_map->dimY, dimX_bin, dimY_bin, bin_size);
+    cudaDeviceSynchronize();
+
+    char *h_grid_2D_binned = (char *)malloc(sizeof(Point) * numCellsBinned);
+    cudaMemcpy(h_grid_2D_binned, d_grid_2D_binned, sizeof(Point) * numCellsBinned, cudaMemcpyDeviceToHost);
+    printGrid2DHost(h_grid_2D_binned, dimX_bin, dimY_bin);
+}
+
+void CudaGrid3D::visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold) {
     // the following condition must be true: freeThreshold < warningThreshold < occupiedThreshold
 
     if (freeThreshold >= warningThreshold || freeThreshold >= occupiedThreshold) {
