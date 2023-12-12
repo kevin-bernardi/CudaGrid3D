@@ -47,11 +47,17 @@ int main(int argc, char* argv[]) {
     pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori);
     updateGrid2D(h_map, 50, 75);
 
-    // printGrid3D(h_map);
-    printGrid2D(h_map);
-
     visualizeAndSaveGrid2D(h_map, "map2d.bmp", false, 10, 55, 85);
-    CudaGrid3D::gridBinning(h_map, 4, 10, 85);
+
+    int* grid_test;
+    int dimx;
+    int dimy;
+
+    CudaGrid3D::getUnknownDensityGrid2D(h_map, 2, 10, 85, grid_test, dimx, dimy);
+
+    CudaGrid3D::printHostGrid2D(grid_test, dimx, dimy);
+
+    free(grid_test);
 
     // generateMeshGrid2D(h_map, "suino.obj");
 }

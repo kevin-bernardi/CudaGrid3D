@@ -82,22 +82,41 @@ void cvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTra
 // ----- print functions -----
 
 // print 2D Grid
-void printGrid2DHost(char *h_grid_2D, int dimx, int dimy);
+void printHostGrid2D(int *h_grid_2D, int dimx, int dimy);
 
-// print the 2D Grid on a line (as it really is in the memory)
-void printLinearGrid2D(Map *h_map);
-
-// print the 2D Grid
-void printGrid2D(Map *h_map);
+// print 2D Grid
+void printHostGrid2D(char *h_grid_2D, int dimx, int dimy);
 
 // print host 3D Grid
-void printGrid3DHost(char *h_grid_3D, int dimx, int dimy, int dimz);
+void printHostGrid3D(char *h_grid_3D, int dimx, int dimy, int dimz);
+
+// print device 2D Grid
+void printDeviceGrid2D(char *d_grid_2D, int dimx, int dimy);
+
+// print device 3D Grid
+void printDeviceGrid3D(char *d_grid_3D, int dimx, int dimy, int dimz);
+
+// print the 2D Grid on a line (as it really is in the memory)
+void printDeviceLinearGrid2D(char *d_grid_2D, int dimx, int dimy);
 
 // print device 3D Grid on a line (as it really is in the memory)
-void printLinearGrid3D(Map *h_map);
+void printDeviceLinearGrid3D(char *d_grid_3D, int dimx, int dimy, int dimz);
+
+// print Map Grids
+
+// print the 2D Grid
+void printMapGrid2D(Map *h_map);
 
 // print device 3D Grid as many 2D planes
-void printGrid3D(Map *h_map);
+void printMapGrid3D(Map *h_map);
+
+// print the 2D Grid on a line (as it really is in the memory)
+void printLinearMapGrid2D(Map *h_map);
+
+// print device 3D Grid on a line (as it really is in the memory)
+void printLinearMapGrid3D(Map *h_map);
+
+// --------
 
 // print device pointcloud
 void printPointcloud(Point *d_pointcloud, int sizePointcloud);
@@ -126,9 +145,8 @@ void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Poi
 // minOccupiedConfidence is the confidence set if only one voxel is found in the height interval of the robot
 void updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidence);
 
-// TODO:
-// grid 2s binning
-void gridBinning(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold);
+// grid 2d binning: used to calculate the density of unknown cells
+void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold, int *&output_grid_2d_binned, int &dimX, int &dimY);
 
 // create an image based on the data from the 2D Grid, save it at the specified path
 // if show is true also visualize the image

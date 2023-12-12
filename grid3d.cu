@@ -349,13 +349,37 @@ void CudaGrid3D::checkDuplicates(Map *h_map, Point *pointcloud, int sizePointclo
 }
 
 // same as printGrid2D but for grids allocated on the host
-void CudaGrid3D::printGrid2DHost(char *h_grid_2D, int dimx, int dimy) {
+void CudaGrid3D::printHostGrid2D(int *h_grid_2D, int dimx, int dimy) {
     if (dimx * dimy <= 0) {
         printf("ERROR! Empty Grid\n");
         return;
     }
 
-    printf("\n\n2D Grid Output\n");
+    printf("\n\nHost 2D Grid Output\n");
+
+    for (int x = 0; x < dimx; x++) {
+        for (int y = 0; y < dimy; y++) {
+            int idx = y + x * dimy;
+
+            if (y == dimy - 1) {
+                printf("%d", h_grid_2D[idx]);
+            } else {
+                printf("%d | ", h_grid_2D[idx]);
+            }
+        }
+
+        printf("\n");
+    }
+}
+
+// same as printGrid2D but for grids allocated on the host
+void CudaGrid3D::printHostGrid2D(char *h_grid_2D, int dimx, int dimy) {
+    if (dimx * dimy <= 0) {
+        printf("ERROR! Empty Grid\n");
+        return;
+    }
+
+    printf("\n\nHost 2D Grid Output\n");
 
     for (int x = 0; x < dimx; x++) {
         for (int y = 0; y < dimy; y++) {
@@ -373,13 +397,13 @@ void CudaGrid3D::printGrid2DHost(char *h_grid_2D, int dimx, int dimy) {
 }
 
 // same as printGrid but for grids allocated on the host
-void CudaGrid3D::printGrid3DHost(char *h_grid_3D, int dimx, int dimy, int dimz) {
+void CudaGrid3D::printHostGrid3D(char *h_grid_3D, int dimx, int dimy, int dimz) {
     if (dimx * dimy * dimz <= 0) {
         printf("ERROR! Empty Grid\n");
         return;
     }
 
-    printf("\n\n3D Grid Output\n");
+    printf("\n\nHost 3D Grid Output\n");
 
     for (int z = 0; z < dimz; z++) {
         printf("Layer %d\n", z);
@@ -399,55 +423,8 @@ void CudaGrid3D::printGrid3DHost(char *h_grid_3D, int dimx, int dimy, int dimz) 
     }
 }
 
-__global__ void printLinearGrid2DKernel(char *d_grid_2D, int numCells) {
-    printf("\n\nLinear Grid 2D Output (DEVICE)\n");
-
-    for (int i = 0; i < numCells; i++) {
-        printf("%d | ", d_grid_2D[i]);
-    }
-
-    printf("\n");
-}
-
-void CudaGrid3D::printLinearGrid2D(Map *h_map) {
-    int numCells = h_map->dimX * h_map->dimY;
-
-    if (numCells <= 0) {
-        printf("Invalid Vector Size! (num. cells: %d)\n", numCells);
-    }
-
-    printLinearGrid2DKernel<<<1, 1>>>(h_map->d_grid_2D, numCells);
-    cudaDeviceSynchronize();
-}
-
-__global__ void printLinearGrid3DKernel(char *d_grid_3D, int numCells) {
-    printf("\n\nLinear Grid 3D Output (DEVICE)\n");
-
-    for (int i = 0; i < numCells; i++) {
-        printf("%d | ", d_grid_3D[i]);
-    }
-
-    printf("\n");
-}
-
-void CudaGrid3D::printLinearGrid3D(Map *h_map) {
-    int numCells = h_map->dimX * h_map->dimY * h_map->dimZ;
-
-    if (numCells <= 0) {
-        printf("Invalid Vector Size! (num. cells: %d)\n", numCells);
-    }
-
-    printLinearGrid3DKernel<<<1, 1>>>(h_map->d_grid_3D, numCells);
-    cudaDeviceSynchronize();
-}
-
-__global__ void printGrid2DKernel(char *d_grid_2D, int dimX, int dimY) {
-    if (dimX * dimY <= 0) {
-        printf("ERROR! Empty matrix\n");
-        return;
-    }
-
-    printf("\n\n2D Grid Output (DEVICE)\n");
+__global__ void printDeviceGrid2DKernel(char *d_grid_2D, int dimX, int dimY) {
+    printf("\n\nDevice 2D Grid Output\n");
 
     for (int x = 0; x < dimX; x++) {
         for (int y = 0; y < dimY; y++) {
@@ -465,18 +442,18 @@ __global__ void printGrid2DKernel(char *d_grid_2D, int dimX, int dimY) {
 }
 
 // print the 2D grid
-void CudaGrid3D::printGrid2D(Map *h_map) {
-    printGrid2DKernel<<<1, 1>>>(h_map->d_grid_2D, h_map->dimX, h_map->dimY);
-    cudaDeviceSynchronize();
-}
-
-__global__ void printGrid3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ) {
-    if (dimX * dimY * dimZ <= 0) {
+void CudaGrid3D::printDeviceGrid2D(char *d_grid_2D, int dimx, int dimy) {
+    if (dimx * dimy <= 0) {
         printf("ERROR! Empty matrix\n");
         return;
     }
 
-    printf("\n\n3D Grid Output (DEVICE)\n");
+    printDeviceGrid2DKernel<<<1, 1>>>(d_grid_2D, dimx, dimy);
+    cudaDeviceSynchronize();
+}
+
+__global__ void printDeviceGrid3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ) {
+    printf("\n\nDevice 3D Grid Output\n");
 
     for (int z = 0; z < dimZ; z++) {
         printf("Layer %d\n", z);
@@ -496,10 +473,77 @@ __global__ void printGrid3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ)
     }
 }
 
-// print the 3D grid in many 2D planes (dimZ 2D planes of size dimX x dimY)
-void CudaGrid3D::printGrid3D(Map *h_map) {
-    printGrid3DKernel<<<1, 1>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ);
+// print device 3D Grid
+void CudaGrid3D::printDeviceGrid3D(char *d_grid_3D, int dimx, int dimy, int dimz) {
+    if (dimx * dimy * dimz <= 0) {
+        printf("ERROR! Empty matrix\n");
+        return;
+    }
+
+    printDeviceGrid3DKernel<<<1, 1>>>(d_grid_3D, dimx, dimy, dimz);
     cudaDeviceSynchronize();
+}
+
+__global__ void printDeviceLinearGrid2DKernel(char *d_grid_2D, int numCells) {
+    printf("\n\nDevice Linear Grid 2D Output\n");
+
+    for (int i = 0; i < numCells; i++) {
+        printf("%d | ", d_grid_2D[i]);
+    }
+
+    printf("\n");
+}
+
+void CudaGrid3D::printDeviceLinearGrid2D(char *d_grid_2D, int dimx, int dimy) {
+    int numCells = dimx * dimy;
+
+    if (numCells <= 0) {
+        printf("Invalid Vector Size! (num. cells: %d)\n", numCells);
+    }
+
+    printDeviceLinearGrid2DKernel<<<1, 1>>>(d_grid_2D, numCells);
+    cudaDeviceSynchronize();
+}
+
+__global__ void printDeviceLinearGrid3DKernel(char *d_grid_3D, int numCells) {
+    printf("\n\nDevice Linear Grid 3D Output\n");
+
+    for (int i = 0; i < numCells; i++) {
+        printf("%d | ", d_grid_3D[i]);
+    }
+
+    printf("\n");
+}
+
+void CudaGrid3D::printDeviceLinearGrid3D(char *d_grid_3D, int dimx, int dimy, int dimz) {
+    int numCells = dimx * dimy * dimz;
+
+    if (numCells <= 0) {
+        printf("Invalid Vector Size! (num. cells: %d)\n", numCells);
+    }
+
+    printDeviceLinearGrid3DKernel<<<1, 1>>>(d_grid_3D, numCells);
+    cudaDeviceSynchronize();
+}
+
+// print the map 2D grid
+void CudaGrid3D::printMapGrid2D(Map *h_map) {
+    printDeviceGrid2D(h_map->d_grid_2D, h_map->dimX, h_map->dimY);
+}
+
+// print the map 3D grid
+void CudaGrid3D::printMapGrid3D(Map *h_map) {
+    printDeviceGrid3D(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ);
+}
+
+// print the map 2D Grid as a 1D array
+void CudaGrid3D::printLinearMapGrid2D(Map *h_map) {
+    printDeviceLinearGrid2D(h_map->d_grid_2D, h_map->dimX, h_map->dimY);
+}
+
+// print the map 3D Grid as a 1D array
+void CudaGrid3D::printLinearMapGrid3D(Map *h_map) {
+    printDeviceLinearGrid3D(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ);
 }
 
 __global__ void printPcKernel(CudaGrid3D::Point *pointcloud, int sizePointcloud) {
@@ -1070,7 +1114,7 @@ __global__ void binarizeGrid2DKernel(char *d_grid_2D, char *d_grid_2D_bin, int n
     }
 }
 
-__global__ void grid2DBinningKernel(char *d_grid_2d_binarized, char *d_grid_2d_binned, int dimX, int dimY, int dimX_bin, int dimY_bin, int bin_size) {
+__global__ void grid2DBinningKernel(char *d_grid_2d_binarized, int *d_grid_2d_binned, int dimX, int dimY, int dimX_bin, int dimY_bin, int bin_size) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < dimX_bin * dimY_bin) {
@@ -1097,7 +1141,7 @@ __global__ void grid2DBinningKernel(char *d_grid_2d_binarized, char *d_grid_2d_b
     }
 }
 
-void CudaGrid3D::gridBinning(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold) {
+void CudaGrid3D::getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold, int *&output_grid_2d_binned, int &dimX, int &dimY) {
     if (freeThreshold >= occupiedThreshold) {
         printf("ERROR, freeThreshold must be lower than occupiedThreshold\n");
         return;
@@ -1110,36 +1154,37 @@ void CudaGrid3D::gridBinning(Map *h_map, int bin_size, int freeThreshold, int oc
 
     // binarize grid 2D
     char *d_grid_2D_binarized;
-
     int numCells = h_map->dimX * h_map->dimY;
-
-    cudaMalloc(&d_grid_2D_binarized, sizeof(Point) * numCells);
+    cudaMalloc(&d_grid_2D_binarized, sizeof(char) * numCells);
 
     int numBlocks = (numCells + 256) / 256;
-
     binarizeGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, d_grid_2D_binarized, numCells, freeThreshold, occupiedThreshold);
-
-    char *h_grid_2D_bin = (char *)malloc(sizeof(Point) * numCells);
-    cudaMemcpy(h_grid_2D_bin, d_grid_2D_binarized, sizeof(Point) * numCells, cudaMemcpyDeviceToHost);
-    printGrid2DHost(h_grid_2D_bin, h_map->dimX, h_map->dimY);
 
     int dimX_bin = h_map->dimX / bin_size;
     int dimY_bin = h_map->dimY / bin_size;
 
+    // grid 2D binning
+
+    int *d_grid_2D_binned;
     int numCellsBinned = dimX_bin * dimY_bin;
-
-    char *d_grid_2D_binned;
-
-    cudaMalloc(&d_grid_2D_binned, sizeof(Point) * numCellsBinned);
+    cudaMalloc(&d_grid_2D_binned, sizeof(int) * numCellsBinned);
 
     int numBlocksBinning = (numCellsBinned + 256) / 256;
-
     grid2DBinningKernel<<<numBlocksBinning, 256>>>(d_grid_2D_binarized, d_grid_2D_binned, h_map->dimX, h_map->dimY, dimX_bin, dimY_bin, bin_size);
     cudaDeviceSynchronize();
 
-    char *h_grid_2D_binned = (char *)malloc(sizeof(Point) * numCellsBinned);
-    cudaMemcpy(h_grid_2D_binned, d_grid_2D_binned, sizeof(Point) * numCellsBinned, cudaMemcpyDeviceToHost);
-    printGrid2DHost(h_grid_2D_binned, dimX_bin, dimY_bin);
+    int *h_grid_2D_binned = (int *)malloc(sizeof(int) * numCellsBinned);
+    cudaMemcpy(h_grid_2D_binned, d_grid_2D_binned, sizeof(int) * numCellsBinned, cudaMemcpyDeviceToHost);
+
+    // free grids allocated on the device (GPU)
+    cudaFree(d_grid_2D_binarized);
+    cudaFree(d_grid_2D_binned);
+
+    // free(h_grid_2D_bin);
+
+    output_grid_2d_binned = h_grid_2D_binned;
+    dimX = dimX_bin;
+    dimY = dimY_bin;
 }
 
 void CudaGrid3D::visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold) {
