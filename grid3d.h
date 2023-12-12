@@ -8,8 +8,8 @@ namespace CudaGrid3D {
 
 class Map {
    public:
-    char *d_grid_3D;
     char *d_grid_2D;
+    char *d_grid_3D;
     int dimX = 0;
     int dimY = 0;
     int dimZ = 0;
@@ -82,10 +82,10 @@ void cvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTra
 // ----- print functions -----
 
 // print 2D Grid
-void printHostGrid2D(int *h_grid_2D, int dimx, int dimy);
-
-// print 2D Grid
 void printHostGrid2D(char *h_grid_2D, int dimx, int dimy);
+
+// print 2D Grid with int values
+void printHostGrid2D(int *h_grid_2D, int dimx, int dimy);
 
 // print host 3D Grid
 void printHostGrid3D(char *h_grid_3D, int dimx, int dimy, int dimz);
@@ -143,7 +143,7 @@ void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Poi
 // maxUnknownConfidence is the confidence set if every voxel inside the height interval of the robot
 // is unknown
 // minOccupiedConfidence is the confidence set if only one voxel is found in the height interval of the robot
-void updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidence);
+void updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int minOccupiedConfidence);
 
 // grid 2d binning: used to calculate the density of unknown cells
 void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold, int *&output_grid_2d_binned, int &dimX, int &dimY);

@@ -33,6 +33,7 @@ using namespace cimg_library;
 #define UNKNOWN_CELL 0
 #define OCCUPIED_CELL 1
 #define FREE_CELL 2
+#define FRONTIER_CELL 150
 
 float approxFloat(float x) {
     if (x >= 0) {
@@ -349,7 +350,7 @@ void CudaGrid3D::checkDuplicates(Map *h_map, Point *pointcloud, int sizePointclo
 }
 
 // same as printGrid2D but for grids allocated on the host
-void CudaGrid3D::printHostGrid2D(int *h_grid_2D, int dimx, int dimy) {
+void CudaGrid3D::printHostGrid2D(char *h_grid_2D, int dimx, int dimy) {
     if (dimx * dimy <= 0) {
         printf("ERROR! Empty Grid\n");
         return;
@@ -373,7 +374,7 @@ void CudaGrid3D::printHostGrid2D(int *h_grid_2D, int dimx, int dimy) {
 }
 
 // same as printGrid2D but for grids allocated on the host
-void CudaGrid3D::printHostGrid2D(char *h_grid_2D, int dimx, int dimy) {
+void CudaGrid3D::printHostGrid2D(int *h_grid_2D, int dimx, int dimy) {
     if (dimx * dimy <= 0) {
         printf("ERROR! Empty Grid\n");
         return;
@@ -826,7 +827,13 @@ __device__ void insertFreePointsKernel(char *d_grid_2D, char *d_grid_3D, int dim
 
         int idx3D = pt.y + pt.x * dimY + pt.z * dimX * dimY;
 
-        if (idx3D < dimX * dimY * dimZ) {
+        // if an obstacle is found but the ray continues, break the cycle to not mark free cells
+        // behind obstacles
+        if (d_grid_3D[idx3D] == OCCUPIED_CELL) {
+            break;
+        }
+
+        if (idx3D < dimX * dimY * dimZ && d_grid_3D[idx3D] != OCCUPIED_CELL) {
             d_grid_3D[idx3D] = FREE_CELL;
         }
     }
@@ -841,7 +848,10 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, CudaGrid3D:
 }
 
 __global__ void rayTracingKernel(CudaGrid3D::Point *d_visited_voxels, int i, int points_per_it, char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int maxTraversedVoxelsPerRay, float resolution, CudaGrid3D::Point *pointcloud, int sizePointcloud, CudaGrid3D::Point ray_start, int minZ, int maxZ) {
+    // thread id
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // start index of the pointcloud for this iteration
     int start_idx = i * points_per_it;
     int d_vst_idx = tid * maxTraversedVoxelsPerRay;
 
@@ -1077,7 +1087,47 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
     }
 }
 
-void CudaGrid3D::updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccupiedConfidence) {
+__global__ void findFrontiersKernel(char *d_grid_2D, int dimX, int dimY, int freeThreshold, int occupiedThreshold) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // exit if the cell is not free
+    if (d_grid_2D[tid] > freeThreshold) {
+        return;
+    }
+
+    int x = (tid / dimY);
+    int y = tid - (x * dimY);
+
+    if (x == 0 || x >= dimX - 1 || y == 0 || y == dimY - 1) {
+        return;
+    }
+
+    // array of 1D indices of the 8 neighbours ("o" in the grid below)
+    //  |o|o|o|
+    //  |o|x|o|
+    //  |o|o|o|
+    int neighbourCellsIndices[8];
+
+    neighbourCellsIndices[0] = (y - 1) + (x - 1) * dimY;
+    neighbourCellsIndices[1] = (y - 1) + (x)*dimY;
+    neighbourCellsIndices[2] = (y - 1) + (x + 1) * dimY;
+    neighbourCellsIndices[3] = (y) + (x - 1) * dimY;
+    neighbourCellsIndices[4] = (y) + (x + 1) * dimY;
+    neighbourCellsIndices[5] = (y + 1) + (x - 1) * dimY;
+    neighbourCellsIndices[6] = (y + 1) + (x)*dimY;
+    neighbourCellsIndices[7] = (y + 1) + (x + 1) * dimY;
+
+    for (int i = 0; i < 8; i++) {
+        int idx2D = neighbourCellsIndices[i];
+        // check if the neighbour is unknown
+        if (d_grid_2D[idx2D] > freeThreshold && d_grid_2D[idx2D] < occupiedThreshold) {
+            d_grid_2D[tid] = FRONTIER_CELL;
+            break;
+        }
+    }
+}
+
+void CudaGrid3D::updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int minOccupiedConfidence) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
@@ -1095,7 +1145,9 @@ void CudaGrid3D::updateGrid2D(Map *h_map, int maxUnknownConfidence, int minOccup
     int numBlocks = (numCellsPlane + 256) / 256;
 
     updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, maxUnknownConfidence, minOccupiedConfidence);
-    // cudaDeviceSynchronize();
+
+    findFrontiersKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->dimX, h_map->dimY, freeThreshold, minOccupiedConfidence);
+    //  cudaDeviceSynchronize();
 }
 
 __global__ void binarizeGrid2DKernel(char *d_grid_2D, char *d_grid_2D_bin, int numCells, int freeThreshold, int occupiedThreshold) {
@@ -1228,6 +1280,9 @@ void CudaGrid3D::visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show,
     // red for occupied cells
     const unsigned char occupied[] = {155, 0, 0};
 
+    // blue for frontier cells
+    const unsigned char frontier[] = {0, 0, 255};
+
     // cimg inverts x and y axis
 
     // scan the 2D grid and create a colored 2D grid image
@@ -1250,6 +1305,11 @@ void CudaGrid3D::visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show,
                 image(j, i, 0, 0) = warning[0];
                 image(j, i, 0, 1) = warning[1];
                 image(j, i, 0, 2) = warning[2];
+            } else if (h_grid[idx] == FRONTIER_CELL) {
+                // use orange
+                image(j, i, 0, 0) = frontier[0];
+                image(j, i, 0, 1) = frontier[1];
+                image(j, i, 0, 2) = frontier[2];
             } else {
                 // use red
                 image(j, i, 0, 0) = occupied[0];
@@ -1264,7 +1324,7 @@ void CudaGrid3D::visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show,
 
     if (show) {
         // create a window that displays the image just created
-        CImgDisplay main_disp(image, "Cuda Grid 2D");
+        CImgDisplay main_disp(image, "2D Grid");
 
         // wait until the user manually close the window
         while (!main_disp.is_closed()) {

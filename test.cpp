@@ -10,13 +10,13 @@ float getTimeDifference(timeval t1, timeval t2) {
 }
 
 int main(int argc, char* argv[]) {
-    int dimX = 10;  // units
-    int dimY = 10;
-    int dimZ = 10;
+    int dimX = 100;  // units
+    int dimY = 100;
+    int dimZ = 100;
     float resolution = 0.1;
     int freeVoxelsMargin = 1;
     int robotVoxelsHeight = 5;
-    int numPoints = 1000;
+    int numPoints = 500;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -45,19 +45,9 @@ int main(int argc, char* argv[]) {
     insertPointcloud(h_map, d_pointcloud, numPoints);
 
     pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori);
-    updateGrid2D(h_map, 50, 75);
+    updateGrid2D(h_map, 10, 50, 75);
 
     visualizeAndSaveGrid2D(h_map, "map2d.bmp", false, 10, 55, 85);
-
-    int* grid_test;
-    int dimx;
-    int dimy;
-
-    CudaGrid3D::getUnknownDensityGrid2D(h_map, 2, 10, 85, grid_test, dimx, dimy);
-
-    CudaGrid3D::printHostGrid2D(grid_test, dimx, dimy);
-
-    free(grid_test);
 
     // generateMeshGrid2D(h_map, "suino.obj");
 }
