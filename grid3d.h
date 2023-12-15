@@ -4,6 +4,8 @@
 // #include <opencv2/core/mat.hpp>
 // #include "star/robotics/math/Transform3D.hpp"
 
+#include <opencv2/highgui/highgui.hpp>
+
 namespace CudaGrid3D {
 
 class Map {
@@ -148,9 +150,8 @@ void updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int m
 // grid 2d binning: used to calculate the density of unknown cells
 void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold, int *&output_grid_2d_binned, int &dimX, int &dimY);
 
-// create an image based on the data from the 2D Grid, save it at the specified path
-// if show is true also visualize the image
-void visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold);
+// returns the cv::Mat of the 2D colored grid
+cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
 int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);

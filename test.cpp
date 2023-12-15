@@ -4,10 +4,20 @@
 
 #include "grid3d.h"
 
+using namespace cv;
+
 float getTimeDifference(timeval t1, timeval t2) {
     float diff = ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000.0;
     return diff;
 }
+
+// void showcvImage() {
+//     Mat img(500, 500, CV_8UC3, Scalar(0, 0, 0));
+//     namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
+//     imshow("Image Test OpenCV", img);
+//     waitKey(0);
+//     return;
+// }
 
 int main(int argc, char* argv[]) {
     int dimX = 100;  // units
@@ -47,29 +57,10 @@ int main(int argc, char* argv[]) {
     pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori);
     updateGrid2D(h_map, 10, 50, 75);
 
-    visualizeAndSaveGrid2D(h_map, "map2d.bmp", false, 10, 55, 85);
+    Mat res = getGrid2D(h_map, 10, 55, 85);
+    namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
+    imshow("Image Test OpenCV", res);
+    waitKey(0);
 
     // generateMeshGrid2D(h_map, "suino.obj");
 }
-
-// int cooInv[2];
-
-// Point* h_pointcloud = new Point[3];
-// Point pt1;
-// pt1.x = -0.1;
-// pt1.y = -0.1;
-// pt1.z = 0.1;
-
-// Point pt2;
-// pt2.x = -0.20;
-// pt2.y = -0.20;
-// pt2.z = 0.1;
-
-// Point pt3;
-// pt3.x = 0.1;
-// pt3.y = 0.1;
-// pt3.z = 0.2;
-
-// h_pointcloud[0] = pt1;
-// h_pointcloud[1] = pt2;
-// h_pointcloud[2] = pt3;

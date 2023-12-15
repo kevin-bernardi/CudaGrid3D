@@ -25,10 +25,13 @@ the signature of the function calls from outside the library
 #include <sys/time.h>
 #include <time.h>
 
+// #include <opencv2/highgui/highgui.hpp>
+
 #include "CImg.h"
 #include "grid3d.h"
 
 using namespace cimg_library;
+using namespace cv;
 
 #define UNKNOWN_CELL 0
 #define OCCUPIED_CELL 1
@@ -1239,17 +1242,17 @@ void CudaGrid3D::getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThres
     dimY = dimY_bin;
 }
 
-void CudaGrid3D::visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show, int freeThreshold, int warningThreshold, int occupiedThreshold) {
-    // the following condition must be true: freeThreshold < warningThreshold < occupiedThreshold
+Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+    Mat error_img;
 
     if (freeThreshold >= warningThreshold || freeThreshold >= occupiedThreshold) {
         printf("ERROR, freeThreshold must be lower than both warningThreshold and occupiedThreshold\n");
-        return;
+        return error_img;
     }
 
     if (freeThreshold >= warningThreshold || warningThreshold >= occupiedThreshold) {
         printf("ERROR, warningThreshold must be lower than occupiedThreshold and higher than freeThreshold \n");
-        return;
+        return error_img;
     }
 
     int dimX = h_map->dimX;
@@ -1265,70 +1268,38 @@ void CudaGrid3D::visualizeAndSaveGrid2D(Map *h_map, const char *path, bool show,
     // transfer the grid from the device to the host
     cudaMemcpy(h_grid, h_map->d_grid_2D, sizeof(char) * numCells, cudaMemcpyDeviceToHost);
 
-    // create an image of size dimX x dimY with 3 channels (for RGB color)
-    CImg<unsigned char> image(dimX, dimY, 1, 3, 0);
+    Vec3b free_cv(0, 255, 0);
+    Vec3b unknown_cv(124, 129, 138);
+    Vec3b warning_cv(0, 160, 255);
+    Vec3b occupied_cv(0, 0, 155);
+    Vec3b frontier_cv(255, 0, 0);
 
-    // green for free cells
-    const unsigned char free[] = {0, 255, 0};
+    Mat data(dimX, dimY, CV_8UC3, Scalar(0, 0, 0));
 
-    // grey for unknown cells
-    const unsigned char unknown[] = {138, 129, 124};
-
-    // orange for maybe occupied cells
-    const unsigned char warning[] = {255, 160, 0};
-
-    // red for occupied cells
-    const unsigned char occupied[] = {155, 0, 0};
-
-    // blue for frontier cells
-    const unsigned char frontier[] = {0, 0, 255};
-
-    // cimg inverts x and y axis
-
-    // scan the 2D grid and create a colored 2D grid image
     for (int i = 0; i < dimX; i++) {
         for (int j = 0; j < dimY; j++) {
             int idx = j + i * dimY;
             // use a different color based on the confidence value found in the cell
             if (h_grid[idx] <= freeThreshold) {
                 // use green
-                image(j, i, 0, 0) = free[0];
-                image(j, i, 0, 1) = free[1];
-                image(j, i, 0, 2) = free[2];
+                data.at<Vec3b>(i, j) = free_cv;
+
             } else if (h_grid[idx] > freeThreshold && h_grid[idx] < warningThreshold) {
                 // use grey
-                image(j, i, 0, 0) = unknown[0];
-                image(j, i, 0, 1) = unknown[1];
-                image(j, i, 0, 2) = unknown[2];
+                data.at<Vec3b>(i, j) = unknown_cv;
+
             } else if (h_grid[idx] >= warningThreshold && h_grid[idx] < occupiedThreshold) {
                 // use orange
-                image(j, i, 0, 0) = warning[0];
-                image(j, i, 0, 1) = warning[1];
-                image(j, i, 0, 2) = warning[2];
+                data.at<Vec3b>(i, j) = warning_cv;
             } else if (h_grid[idx] == FRONTIER_CELL) {
                 // use orange
-                image(j, i, 0, 0) = frontier[0];
-                image(j, i, 0, 1) = frontier[1];
-                image(j, i, 0, 2) = frontier[2];
+                data.at<Vec3b>(i, j) = frontier_cv;
             } else {
                 // use red
-                image(j, i, 0, 0) = occupied[0];
-                image(j, i, 0, 1) = occupied[1];
-                image(j, i, 0, 2) = occupied[2];
+                data.at<Vec3b>(i, j) = occupied_cv;
             }
         }
     }
 
-    // save the image at the specified path
-    image.save(path);
-
-    if (show) {
-        // create a window that displays the image just created
-        CImgDisplay main_disp(image, "2D Grid");
-
-        // wait until the user manually close the window
-        while (!main_disp.is_closed()) {
-            main_disp.wait();
-        }
-    }
+    return data;
 }
