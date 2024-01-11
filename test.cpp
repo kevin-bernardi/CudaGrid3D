@@ -20,13 +20,13 @@ float getTimeDifference(timeval t1, timeval t2) {
 // }
 
 int main(int argc, char* argv[]) {
-    int dimX = 100;  // units
-    int dimY = 100;
-    int dimZ = 100;
+    int dimX = 500;  // units
+    int dimY = 500;
+    int dimZ = 500;
     float resolution = 0.1;
     int freeVoxelsMargin = 1;
     int robotVoxelsHeight = 5;
-    int numPoints = 500;
+    int numPoints = 10000;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -61,6 +61,8 @@ int main(int argc, char* argv[]) {
     namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
     imshow("Image Test OpenCV", res);
     waitKey(0);
+
+    generateMesh(h_map, "./compl_mesh.obj");
 
     // generateMeshGrid2D(h_map, "suino.obj");
 }

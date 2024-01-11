@@ -79,7 +79,7 @@ void checkDuplicates(Map *h_map, Point *d_pointcloud, int sizePointcloud);
 
 // Insert the points found in the cv:Mat matrix acquired by the zed camera.
 // This function accepts a converted
-void cvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, CudaTransform3D tf);
+void cvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, bool enableRototranslation, CudaTransform3D tf);
 
 // ----- print functions -----
 

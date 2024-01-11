@@ -756,7 +756,7 @@ void CudaGrid3D::generateSimpleMesh(Map *h_map, const char *path) {
     free(h_grid);
 }
 
-__global__ void arrToPointcloudKernel(CudaGrid3D::Point *d_pointcloud, float *d_arr, int length, CudaGrid3D::CudaTransform3D tf) {
+__global__ void arrToPointcloudKernel(CudaGrid3D::Point *d_pointcloud, float *d_arr, int length, bool enableRototranslation, CudaGrid3D::CudaTransform3D tf) {
     int tid = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
 
     if (tid < length) {
@@ -775,14 +775,17 @@ __global__ void arrToPointcloudKernel(CudaGrid3D::Point *d_pointcloud, float *d_
 
             CudaGrid3D::Point res;
 
-            // rototranslate point
-            res.x = tf.tra[0] + tf.rot[0][0] * point.x + tf.rot[0][1] * point.y + tf.rot[0][2] * point.z;
-            res.y = tf.tra[1] + tf.rot[1][0] * point.x + tf.rot[1][1] * point.y + tf.rot[1][2] * point.z;
-            res.z = tf.tra[2] + tf.rot[2][0] * point.x + tf.rot[2][1] * point.y + tf.rot[2][2] * point.z;
+            if (enableRototranslation) {
+                // rototranslate point
+                res.x = tf.tra[0] + tf.rot[0][0] * point.x + tf.rot[0][1] * point.y + tf.rot[0][2] * point.z;
+                res.y = tf.tra[1] + tf.rot[1][0] * point.x + tf.rot[1][1] * point.y + tf.rot[1][2] * point.z;
+                res.z = tf.tra[2] + tf.rot[2][0] * point.x + tf.rot[2][1] * point.y + tf.rot[2][2] * point.z;
 
-            // res.x = x;
-            // res.y = y;
-            // res.z = z;
+            } else {
+                res.x = x;
+                res.y = y;
+                res.z = z;
+            }
 
             // remove floating point division error
             res.x = approxFloatKernel(res.x * 100000.0) / 100000.0;
@@ -796,7 +799,7 @@ __global__ void arrToPointcloudKernel(CudaGrid3D::Point *d_pointcloud, float *d_
     }
 }
 
-void CudaGrid3D::cvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, CudaTransform3D tf) {
+void CudaGrid3D::cvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, bool enableRototranslation, CudaTransform3D tf) {
     float *d_cvmat_arr;
     cudaMalloc(&d_cvmat_arr, sizeof(float) * length);
 
@@ -807,9 +810,15 @@ void CudaGrid3D::cvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_poi
     int numPoints = length / 4;
     initDevicePointcloud(d_pointcloud, numPoints);
 
+    if (enableRototranslation) {
+        printf("rototranslate points...\n");
+    } else {
+        printf("rototranslation DISABLED\n");
+    }
+
     // call kernel function
     int numBlocks = (numPoints + 256) / 256;
-    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_cvmat_arr, length, tf);
+    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_cvmat_arr, length, enableRototranslation, tf);
 
     // free device memory
     cudaFree(d_cvmat_arr);

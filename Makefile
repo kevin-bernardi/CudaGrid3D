@@ -14,10 +14,10 @@ LIBS_PROGRAM=-L./ -l$(PROGRAM)
 
 
 build: $(EXECUTABLE)
-	mkdir -p output/CudaGrid3D
-	cp $(SHARED_LIB_NAME).so ./output/CudaGrid3D/$(SHARED_LIB_NAME).so
-	mkdir -p ./output/CudaGrid3D/include
-	cp $(PROGRAM).h ./output/CudaGrid3D/include/$(PROGRAM).h
+	mkdir -p output/cuda_grid_3d
+	cp $(SHARED_LIB_NAME).so ./output/cuda_grid_3d/$(SHARED_LIB_NAME).so
+	mkdir -p ./output/cuda_grid_3d/include
+	cp $(PROGRAM).h ./output/cuda_grid_3d/include/$(PROGRAM).h
 
 $(EXECUTABLE): $(SHARED_LIB_NAME).so $(PROGRAM).h $(CPP_FILE)
 	g++ -o $(EXECUTABLE) $(CPP_FILE) $(LIBS_PROGRAM) $(LIBS_OPENCV) $(INCLUDE_OPENCV)
