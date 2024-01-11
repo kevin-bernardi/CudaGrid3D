@@ -3,7 +3,7 @@
 BASIC GUIDE
 
 host variable/code/function... -> variable/code/function... allocated on CPU + RAM
-device variable/code/function... -> variable/code/function... allocated on GPU + VRAM
+device variable/code/function... -> variable/code/function... allocated on GPU + VRAM (like ram but only for the gpu)
 
 d_variable -> variable allocated on the device (it is not mandatory, just to remember where a variable is allocated)
 h_variable -> variable allocated on the host
@@ -27,10 +27,8 @@ the signature of the function calls from outside the library
 
 // #include <opencv2/highgui/highgui.hpp>
 
-#include "CImg.h"
 #include "grid3d.h"
 
-using namespace cimg_library;
 using namespace cv;
 
 #define UNKNOWN_CELL 0
@@ -833,22 +831,16 @@ __device__ void printVisitedVoxelsRT(CudaGrid3D::Point *arr, int start, int len)
     printf("\n-------------------\n");
 }
 
-__device__ void insertFreePointsKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, CudaGrid3D::Point *d_free_points, int start, int length, int zMin, int zMax) {
-    for (int i = 1; i < length; i++) {
-        CudaGrid3D::Point pt = d_free_points[start + i];
+__device__ int getIdx3D(int dimx, int dimy, int dimz, int x, int y, int z) {
+    int idx = y + x * dimy + z * dimx * dimy;
 
-        int idx3D = pt.y + pt.x * dimY + pt.z * dimX * dimY;
-
-        // if an obstacle is found but the ray continues, break the cycle to not mark free cells
-        // behind obstacles
-        if (d_grid_3D[idx3D] == OCCUPIED_CELL) {
-            break;
-        }
-
-        if (idx3D < dimX * dimY * dimZ && d_grid_3D[idx3D] != OCCUPIED_CELL) {
-            d_grid_3D[idx3D] = FREE_CELL;
-        }
+    // check if the idx is inside the 3d grid
+    if (idx < dimx * dimy * dimz) {
+        return idx;
     }
+
+    // error, out of bound
+    return -1;
 }
 
 __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, CudaGrid3D::Point pt) {
@@ -859,18 +851,13 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, CudaGrid3D:
     return false;
 }
 
-__global__ void rayTracingKernel(CudaGrid3D::Point *d_visited_voxels, int i, int points_per_it, char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int maxTraversedVoxelsPerRay, float resolution, CudaGrid3D::Point *pointcloud, int sizePointcloud, CudaGrid3D::Point ray_start, int minZ, int maxZ) {
+__global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointcloud, int sizePointcloud, int dimX, int dimY, int dimZ, float resolution, CudaGrid3D::Point ray_start) {
     // thread id
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // start index of the pointcloud for this iteration
-    int start_idx = i * points_per_it;
-    int d_vst_idx = tid * maxTraversedVoxelsPerRay;
-
-    if (tid < points_per_it && (start_idx + tid) < sizePointcloud) {
-        int array_idx = 0;
+    if (tid < sizePointcloud) {
         float _bin_size = 1.0;
-        CudaGrid3D::Point ray_end = pointcloud[start_idx + tid];
+        CudaGrid3D::Point ray_end = d_pointcloud[tid];
 
         if (ray_end.x == 0.0 && ray_end.y == 0.0 && ray_end.z == 0.0) {
             return;
@@ -891,23 +878,23 @@ __global__ void rayTracingKernel(CudaGrid3D::Point *d_visited_voxels, int i, int
 
         // end the ray a diagonal cell before
 
-        if (last_voxel.x - current_voxel.x > 0) {
-            last_voxel.x -= 1;
-        } else if (last_voxel.x - current_voxel.x < 0) {
-            last_voxel.x += 1;
-        }
+        // if (last_voxel.x - current_voxel.x > 0) {
+        //     last_voxel.x -= 1;
+        // } else if (last_voxel.x - current_voxel.x < 0) {
+        //     last_voxel.x += 1;
+        // }
 
-        if (last_voxel.y - current_voxel.y > 0) {
-            last_voxel.y -= 1;
-        } else if (last_voxel.y - current_voxel.y < 0) {
-            last_voxel.y += 1;
-        }
+        // if (last_voxel.y - current_voxel.y > 0) {
+        //     last_voxel.y -= 1;
+        // } else if (last_voxel.y - current_voxel.y < 0) {
+        //     last_voxel.y += 1;
+        // }
 
-        if (last_voxel.z - current_voxel.z > 0 && last_voxel.z > resolution) {
-            last_voxel.z -= 1;
-        } else if (last_voxel.z - current_voxel.z < 0) {
-            last_voxel.z += 1;
-        }
+        // if (last_voxel.z - current_voxel.z > 0 && last_voxel.z > resolution) {
+        //     last_voxel.z -= 1;
+        // } else if (last_voxel.z - current_voxel.z < 0) {
+        //     last_voxel.z += 1;
+        // }
 
         // printf("last voxel: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
 
@@ -922,12 +909,14 @@ __global__ void rayTracingKernel(CudaGrid3D::Point *d_visited_voxels, int i, int
         if (checkPointInGridBounds(dimX, dimY, dimZ, current_voxel)) {
             // printf("current voxel floored: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
         } else {
+            return;
             // printf("current voxel out of bounds! pt (%f,%f,%f)\n", current_voxel.x, current_voxel.y, current_voxel.z);
         }
 
         if (checkPointInGridBounds(dimX, dimY, dimZ, last_voxel)) {
             // printf("last voxel floored: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
         } else {
+            return;
             // printf("last voxel out of bounds! pt (%f,%f,%f)\n", last_voxel.x, last_voxel.y, last_voxel.z);
         }
 
@@ -964,8 +953,9 @@ __global__ void rayTracingKernel(CudaGrid3D::Point *d_visited_voxels, int i, int
         float tDeltaY = (ray.y != 0) ? _bin_size / ray.y * stepY : FLT_MAX;
         float tDeltaZ = (ray.z != 0) ? _bin_size / ray.z * stepZ : FLT_MAX;
 
-        d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
-        array_idx++;
+        // appena tolti
+        // d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
+        // array_idx++;
 
         // printf("before cycle tMaxX=%f, tMaxY=%f, tMaxZ=%f\n", tMaxX, tMaxY, tMaxZ);
         while (current_voxel.x != last_voxel.x || current_voxel.y != last_voxel.y || current_voxel.z != last_voxel.z) {
@@ -988,51 +978,32 @@ __global__ void rayTracingKernel(CudaGrid3D::Point *d_visited_voxels, int i, int
                 }
             }
 
-            d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
-            array_idx++;
+            // appena tolti
+            // d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
+            // array_idx++;
+
+            // int idx3D = current_voxel.y + current_voxel.x * dimY + current_voxel.z * dimX * dimY;
+
+            int idx3D = getIdx3D(dimX, dimY, dimZ, current_voxel.x, current_voxel.y, current_voxel.z);
+
+            if (idx3D >= 0 && d_grid_3D[idx3D] != OCCUPIED_CELL) {
+                d_grid_3D[idx3D] = FREE_CELL;
+            } else {
+                break;
+            }
         }
         // printf("array idx: %d\n", array_idx);
         // printVisitedVoxels(d_visited_voxels, d_vst_idx, array_idx);
 
-        insertFreePointsKernel(d_grid_2D, d_grid_3D, dimX, dimY, dimZ, d_visited_voxels, d_vst_idx, array_idx, minZ, maxZ);
+        // appena tolto
+        // insertFreePointsKernel(d_grid_2D, d_grid_3D, dimX, dimY, dimZ, d_visited_voxels, d_vst_idx, array_idx, minZ, maxZ);
     }
 }
 
-void CudaGrid3D::pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, Point origin) {
-    // int numBlocks = (sizePointcloud + 256) / 256;
-
-    int dimX = h_map->dimX;
-    int dimY = h_map->dimY;
-    int dimZ = h_map->dimZ;
-
-    // parallelize everything is not memory feasible!
-    // create nIterations serial jobs
-    // for each job raytrace points_per_it points which is equal to sizePointcloud/nIterations
-    int nIterations = 1000;
-    int points_per_it = (sizePointcloud / nIterations) + 1;
-
-    // security factor
-    // the number of traversed voxels is equal to the number of traversed voxels by the longest possible ray which is
-    // the diagonal of the 3D grid (= sqrt(a^2+b^2+c^2)) multiplied by a security factor
-    // (the number of traversed voxel by a ray is AT LEAST equal to the length of the ray expressed in number of voxels)
-    int diagonal = floor(sqrt(dimX * dimX + dimY * dimY + dimZ * dimZ));
-    int spaceFactor = 10;
-    int maxTraversedVoxelsPerRay = spaceFactor * diagonal;
-
-    Point *d_visited_voxels;
-    // cudaMalloc only of the space required by a single serial job
-    cudaError_t status = cudaMalloc(&d_visited_voxels, points_per_it * sizeof(Point) * maxTraversedVoxelsPerRay);
-
-    if (status != cudaSuccess) {
-        printf("ERROR cudaMalloc rayTracing!\n");
-    }
-
-    for (int i = 0; i < nIterations; i++) {
-        int numBlocks = (points_per_it + 256) / 256;
-        rayTracingKernel<<<numBlocks, 256>>>(d_visited_voxels, i, points_per_it, h_map->d_grid_2D, h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ, maxTraversedVoxelsPerRay, h_map->resolution, d_pointcloud, sizePointcloud, origin, h_map->freeVoxelsMargin, h_map->robotVoxelsHeight);
-    }
+void CudaGrid3D::pointcloudRayTracing(Map *h_map, CudaGrid3D::Point *d_pointcloud, int sizePointcloud, CudaGrid3D::Point origin) {
+    int numBlocks = (sizePointcloud + 256) / 256;
+    rayTracingKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, d_pointcloud, sizePointcloud, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->resolution, origin);
     cudaDeviceSynchronize();
-    cudaFree(d_visited_voxels);
 }
 
 __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int freeVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int minOccupiedConfidence) {
@@ -1044,6 +1015,7 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
         int countUnknown = 0;
         int countOccupied = 0;
 
+        // height of the robot after floor margin remotion
         int scanHeight = robotVoxelsHeight - freeVoxelsMargin;
 
         int x = (tid / dimY);
@@ -1283,7 +1255,7 @@ Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, i
     Vec3b occupied_cv(0, 0, 155);
     Vec3b frontier_cv(255, 0, 0);
 
-    Mat data(dimX, dimY, CV_8UC3, Scalar(0, 0, 0));
+    Mat data(dimX, dimY, CV_8UC3, unknown_cv);
 
     for (int i = 0; i < dimX; i++) {
         for (int j = 0; j < dimY; j++) {
