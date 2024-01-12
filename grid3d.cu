@@ -25,7 +25,8 @@ the signature of the function calls from outside the library
 #include <sys/time.h>
 #include <time.h>
 
-// #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 #include "grid3d.h"
 
@@ -855,7 +856,7 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, CudaGrid3D:
     return false;
 }
 
-__global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointcloud, int sizePointcloud, int dimX, int dimY, int dimZ, float resolution, CudaGrid3D::Point ray_start) {
+__global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointcloud, int sizePointcloud, int dimX, int dimY, int dimZ, float resolution, CudaGrid3D::Point ray_start, bool freeObstacles) {
     // thread id
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -880,26 +881,6 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
         last_voxel.y = approxFloatKernel(ray_end.y / resolution);
         last_voxel.z = approxFloatKernel(ray_end.z / resolution);
 
-        // end the ray a diagonal cell before
-
-        // if (last_voxel.x - current_voxel.x > 0) {
-        //     last_voxel.x -= 1;
-        // } else if (last_voxel.x - current_voxel.x < 0) {
-        //     last_voxel.x += 1;
-        // }
-
-        // if (last_voxel.y - current_voxel.y > 0) {
-        //     last_voxel.y -= 1;
-        // } else if (last_voxel.y - current_voxel.y < 0) {
-        //     last_voxel.y += 1;
-        // }
-
-        // if (last_voxel.z - current_voxel.z > 0 && last_voxel.z > resolution) {
-        //     last_voxel.z -= 1;
-        // } else if (last_voxel.z - current_voxel.z < 0) {
-        //     last_voxel.z += 1;
-        // }
-
         // printf("last voxel: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
 
         current_voxel.x += (dimX / 2);
@@ -909,6 +890,28 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
         last_voxel.x += (dimX / 2);
         last_voxel.y += (dimY / 2);
         // last_voxel.z += (dimZ / 10);
+
+        // end the ray a diagonal cell before if freeObstacles is active (true)
+
+        if (freeObstacles) {
+            if (last_voxel.x - current_voxel.x > 0) {
+                last_voxel.x -= 1;
+            } else if (last_voxel.x - current_voxel.x < 0) {
+                last_voxel.x += 1;
+            }
+
+            if (last_voxel.y - current_voxel.y > 0) {
+                last_voxel.y -= 1;
+            } else if (last_voxel.y - current_voxel.y < 0) {
+                last_voxel.y += 1;
+            }
+
+            if (last_voxel.z - current_voxel.z > 0 && last_voxel.z > 0) {
+                last_voxel.z -= 1;
+            } else if (last_voxel.z - current_voxel.z < 0) {
+                last_voxel.z += 1;
+            }
+        }
 
         if (checkPointInGridBounds(dimX, dimY, dimZ, current_voxel)) {
             // printf("current voxel floored: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
@@ -957,10 +960,6 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
         float tDeltaY = (ray.y != 0) ? _bin_size / ray.y * stepY : FLT_MAX;
         float tDeltaZ = (ray.z != 0) ? _bin_size / ray.z * stepZ : FLT_MAX;
 
-        // appena tolti
-        // d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
-        // array_idx++;
-
         // printf("before cycle tMaxX=%f, tMaxY=%f, tMaxZ=%f\n", tMaxX, tMaxY, tMaxZ);
         while (current_voxel.x != last_voxel.x || current_voxel.y != last_voxel.y || current_voxel.z != last_voxel.z) {
             // printf("tMaxX=%f, tMaxY=%f, tMaxZ=%f\n", tMaxX, tMaxY, tMaxZ);
@@ -982,29 +981,28 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
                 }
             }
 
-            // appena tolti
-            // d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
-            // array_idx++;
-
             int idx3D = getIdx3D(dimX, dimY, dimZ, current_voxel.x, current_voxel.y, current_voxel.z);
 
-            if (idx3D >= 0 && d_grid_3D[idx3D] != OCCUPIED_CELL) {
-                d_grid_3D[idx3D] = FREE_CELL;
-            } else {
-                break;
+            if (idx3D >= 0) {
+                // if freeObstacles is true we must know if we are freeing the last pixel of the ray (the second big condition checks if we are at the last iteration of the while cycle)
+                if (freeObstacles && (current_voxel.x != last_voxel.x || current_voxel.y != last_voxel.y || current_voxel.z != last_voxel.z)) {
+                    // do not check if it's an obstacles, set it as free anyway
+                    d_grid_3D[idx3D] = FREE_CELL;
+                } else if (!freeObstacles && d_grid_3D[idx3D] != OCCUPIED_CELL) {
+                    // check if obstacle
+                    d_grid_3D[idx3D] = FREE_CELL;
+                } else if (!freeObstacles && d_grid_3D[idx3D == OCCUPIED_CELL]) {
+                    // interrupt the ray if we encounter an obstacle before its end
+                    break;
+                }
             }
         }
-        // printf("array idx: %d\n", array_idx);
-        // printVisitedVoxels(d_visited_voxels, d_vst_idx, array_idx);
-
-        // appena tolto
-        // insertFreePointsKernel(d_grid_2D, d_grid_3D, dimX, dimY, dimZ, d_visited_voxels, d_vst_idx, array_idx, minZ, maxZ);
     }
 }
 
-void CudaGrid3D::pointcloudRayTracing(Map *h_map, CudaGrid3D::Point *d_pointcloud, int sizePointcloud, CudaGrid3D::Point origin) {
+void CudaGrid3D::pointcloudRayTracing(Map *h_map, CudaGrid3D::Point *d_pointcloud, int sizePointcloud, CudaGrid3D::Point origin, bool freeObstacles) {
     int numBlocks = (sizePointcloud + 256) / 256;
-    rayTracingKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, d_pointcloud, sizePointcloud, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->resolution, origin);
+    rayTracingKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, d_pointcloud, sizePointcloud, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->resolution, origin, freeObstacles);
     cudaDeviceSynchronize();
 }
 
@@ -1227,7 +1225,7 @@ void CudaGrid3D::getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThres
     dimY = dimY_bin;
 }
 
-Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition) {
     Mat error_img;
 
     if (freeThreshold >= warningThreshold || freeThreshold >= occupiedThreshold) {
@@ -1285,6 +1283,17 @@ Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, i
             }
         }
     }
+
+    int robot_pos_x = approxFloat(robotPosition->tra[0] / h_map->resolution) + (h_map->dimX / 2);
+    int robot_pos_y = approxFloat(robotPosition->tra[1] / h_map->resolution) + (h_map->dimY / 2);
+
+    // opencv inverts row and columns for points
+    cv::Point robot_circle_center(robot_pos_y, robot_pos_x);
+
+    Scalar robot_position_color(153, 0, 153);
+    // int thickness = 1;
+    int radius = 5;
+    cv::circle(data, robot_circle_center, radius, robot_position_color, FILLED);
 
     return data;
 }

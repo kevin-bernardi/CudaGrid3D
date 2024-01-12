@@ -5,6 +5,7 @@
 #include "grid3d.h"
 
 using namespace cv;
+using namespace CudaGrid3D;
 
 float getTimeDifference(timeval t1, timeval t2) {
     float diff = ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000.0;
@@ -54,10 +55,15 @@ int main(int argc, char* argv[]) {
     generateRandomPointcloud(h_map, d_pointcloud, numPoints);
     insertPointcloud(h_map, d_pointcloud, numPoints);
 
-    pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori);
+    pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori, false);
     updateGrid2D(h_map, 10, 50, 75);
 
-    Mat res = getGrid2D(h_map, 10, 55, 85);
+    CudaTransform3D point_ori;
+
+    point_ori.tra[0] = 0.0;
+    point_ori.tra[1] = 0.0;
+
+    Mat res = getGrid2D(h_map, 10, 55, 85, &point_ori);
     namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
     imshow("Image Test OpenCV", res);
     waitKey(0);

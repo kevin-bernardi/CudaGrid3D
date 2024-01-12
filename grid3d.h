@@ -139,7 +139,7 @@ void generateSimpleMesh(Map *h_map, const char *path, bool isOccupationMesh);
 
 // ray tracing to find free cells
 // rays starts at origin and ends at the first encountered obstacle in its own direction
-void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Point origin);
+void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Point origin, bool freeObstacles);
 
 // update occupied, free and unknown cells of the 2D grid using the data from 3D grid
 // maxUnknownConfidence is the confidence set if every voxel inside the height interval of the robot
@@ -151,7 +151,7 @@ void updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int m
 void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold, int *&output_grid_2d_binned, int &dimX, int &dimY);
 
 // returns the cv::Mat of the 2D colored grid
-cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold);
+cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition);
 
 // test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
 int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);
