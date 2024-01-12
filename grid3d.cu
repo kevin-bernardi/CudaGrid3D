@@ -55,10 +55,6 @@ __device__ float approxFloatKernel(float x) {
 __global__ void initMapKernel(char *d_grid_2D, char *d_grid_3D, int numCellsGrid2D, int numCellsGrid3D) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // if (tid == numCells - 1) {
-    //     printf("initializing vector3D in kernel\n");
-    // }
-
     if (tid < numCellsGrid2D) {
         d_grid_2D[tid] = UNKNOWN_CELL;
     }
@@ -188,6 +184,16 @@ int CudaGrid3D::getLinearIndex2D(Map *h_map, int x, int y) {
     }
 }
 
+__device__ int getIdx3D(int dimx, int dimy, int dimz, int x, int y, int z) {
+    // check if the idx is inside the 3d grid
+    if (x >= 0 && y >= 0 && z >= 0 && x < dimx && y < dimy && z < dimz) {
+        return y + x * dimy + z * dimx * dimy;
+    }
+
+    // error, out of bound
+    return -1;
+}
+
 __global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGrid3D::Point *pointcloud, int n, int dimX, int dimY, int dimZ, float resolution, int freeVoxelsMargin, int robotVoxelsHeight) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -220,11 +226,17 @@ __global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGri
         // printf("Floored point (%f, %f, %f): %d, %d, %d\n", pt.x, pt.y, pt.z, x, y, z);
 
         if (x < dimX && y < dimY && z < dimZ && x >= 0 && y >= 0 && z >= 0) {
-            int idx3D = y + x * dimY + z * dimX * dimY;
+            int idx3D = getIdx3D(dimX, dimY, dimZ, x, y, z);
+
+            // int idx3D = y + x * dimY + z * dimX * dimY;
 
             // printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
             // printf("The point is floored to (%d, %d, %d) and added at idx %d\n", x, y, z, idx);
-            d_grid_3D[idx3D] = OCCUPIED_CELL;
+
+            // always check if idx3D is valid (getIdx3D returns -1 if the point is out of bound)
+            if (idx3D >= 0) {
+                d_grid_3D[idx3D] = OCCUPIED_CELL;
+            }
 
         } else {
             // point out of bound
@@ -236,7 +248,7 @@ __global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGri
 // insert a pointcloud (array of points (x,y,z)) in the 3D grid
 void CudaGrid3D::insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud) {
     if (sizePointcloud <= 0) {
-        printf("insertPointcloud() ERROR! sizePointcloud is not valid!\n");
+        // printf("insertPointcloud() ERROR! sizePointcloud is not valid!\n");
         return;
     }
 
@@ -285,8 +297,8 @@ __global__ void generateRandomPcKernel(CudaGrid3D::Point *pointcloud, int n, cur
         pt.z = z;
 
         if (x >= dimX_meters / 2 || y >= dimY_meters / 2 || z >= dimZ_meters || x <= -dimX_meters / 2 || y <= -dimY_meters / 2 || z <= 0) {
-            printf("***************ERROR, the generated point doesn't have valid coordinates!***************\n");
-            printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
+            // printf("***************ERROR, the generated point doesn't have valid coordinates!***************\n");
+            // printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
         } else {
             // printf("generated point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
             pointcloud[tid] = pt;
@@ -334,9 +346,9 @@ __global__ void checkDuplicatesKernel(CudaGrid3D::Point *pointcloud, int *pointc
     }
 
     if (duplicates) {
-        printf("WARNING! There are duplicates in the pointcloud!\n");
+        // printf("WARNING! There are duplicates in the pointcloud!\n");
     } else {
-        printf("NO Duplicates in the pointcloud\n");
+        // printf("NO Duplicates in the pointcloud\n");
     }
 }
 
@@ -715,7 +727,7 @@ void CudaGrid3D::generateMesh(Map *h_map, const char *path) {
     free(h_grid);
 }
 
-void CudaGrid3D::generateSimpleMesh(Map *h_map, const char *path) {
+void CudaGrid3D::generateSimpleMesh(Map *h_map, const char *path, bool isOccupationMesh) {
     float dimX = h_map->dimX;
     float dimY = h_map->dimY;
     float dimZ = h_map->dimZ;
@@ -731,8 +743,18 @@ void CudaGrid3D::generateSimpleMesh(Map *h_map, const char *path) {
 
     fptr = fopen(path, "w");
 
+    char checkStatus;
+
+    if (isOccupationMesh) {
+        // if isOccupationMesh is true build a mesh where obstacles are drawn
+        checkStatus = OCCUPIED_CELL;
+    } else {
+        // otherwise draw the free space
+        checkStatus = FREE_CELL;
+    }
+
     for (int i = 0; i < numCells; i++) {
-        if (h_grid[i] == OCCUPIED_CELL) {
+        if (h_grid[i] == checkStatus) {
             int *result = (int *)malloc(sizeof(int) * 3);
             getCoordinatesInv3D(h_map, i, result);
 
@@ -808,12 +830,6 @@ void CudaGrid3D::cvMatToPointcloud(float *h_cvmat_arr, int length, Point **d_poi
     int numPoints = length / 4;
     initDevicePointcloud(d_pointcloud, numPoints);
 
-    if (enableRototranslation) {
-        printf("rototranslate points...\n");
-    } else {
-        printf("rototranslation DISABLED\n");
-    }
-
     // call kernel function
     int numBlocks = (numPoints + 256) / 256;
     arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_cvmat_arr, length, enableRototranslation, tf);
@@ -829,18 +845,6 @@ __device__ void printVisitedVoxelsRT(CudaGrid3D::Point *arr, int start, int len)
         printf("> %f, %f, %f\n", arr[start + i].x, arr[start + i].y, arr[start + i].z);
     }
     printf("\n-------------------\n");
-}
-
-__device__ int getIdx3D(int dimx, int dimy, int dimz, int x, int y, int z) {
-    int idx = y + x * dimy + z * dimx * dimy;
-
-    // check if the idx is inside the 3d grid
-    if (idx < dimx * dimy * dimz) {
-        return idx;
-    }
-
-    // error, out of bound
-    return -1;
 }
 
 __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, CudaGrid3D::Point pt) {
@@ -982,8 +986,6 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
             // d_visited_voxels[d_vst_idx + array_idx] = current_voxel;
             // array_idx++;
 
-            // int idx3D = current_voxel.y + current_voxel.x * dimY + current_voxel.z * dimX * dimY;
-
             int idx3D = getIdx3D(dimX, dimY, dimZ, current_voxel.x, current_voxel.y, current_voxel.z);
 
             if (idx3D >= 0 && d_grid_3D[idx3D] != OCCUPIED_CELL) {
@@ -1022,9 +1024,11 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
         int y = tid - (x * dimY);
 
         for (int z = freeVoxelsMargin; z < robotVoxelsHeight; z++) {
-            int idx3D = y + x * dimY + z * dimX * dimY;
+            // int idx3D = y + x * dimY + z * dimX * dimY;
+            int idx3D = getIdx3D(dimX, dimY, dimZ, x, y, z);
 
-            if (d_grid_3D[idx3D] == OCCUPIED_CELL) {
+            // always check if idx3D is valid (getIdx3D returns -1 if the point is out of bound)
+            if (idx3D >= 0 && d_grid_3D[idx3D] == OCCUPIED_CELL) {
                 countOccupied++;
 
                 // 10% extension
@@ -1046,7 +1050,7 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
 
                 // return;
 
-            } else if (d_grid_3D[idx3D] == UNKNOWN_CELL) {
+            } else if (idx3D >= 0 && d_grid_3D[idx3D] == UNKNOWN_CELL) {
                 countUnknown++;
             }
         }

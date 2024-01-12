@@ -133,7 +133,7 @@ void printPointcloud(Point *d_pointcloud, int sizePointcloud);
 
 void generateMeshGrid2D(Map *h_map, const char *path);
 void generateMesh(Map *h_map, const char *path);
-void generateSimpleMesh(Map *h_map, const char *path);
+void generateSimpleMesh(Map *h_map, const char *path, bool isOccupationMesh);
 
 // ------------------------
 
