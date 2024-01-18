@@ -66,16 +66,16 @@ __global__ void initMapKernel(char *d_grid_2D, char *d_grid_3D, int numCellsGrid
 }
 
 // initialize 3d grid, make every cell false
-void CudaGrid3D::initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int freeVoxelsMargin, int robotVoxelsHeight) {
+void CudaGrid3D::initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight) {
     h_map->dimX = dimX;
     h_map->dimY = dimY;
     h_map->dimZ = dimZ;
     h_map->cellSize = cellSize;
-    h_map->freeVoxelsMargin = freeVoxelsMargin;
+    h_map->floorVoxelsMargin = floorVoxelsMargin;
     h_map->robotVoxelsHeight = robotVoxelsHeight;
 
-    if (robotVoxelsHeight < freeVoxelsMargin) {
-        printf("ERROR initMap(): robotVoxelsHeight must be higher than freeVoxelsMargin\n");
+    if (robotVoxelsHeight < floorVoxelsMargin) {
+        printf("ERROR initMap(): robotVoxelsHeight must be higher than floorVoxelsMargin\n");
         return;
     }
 
@@ -195,7 +195,7 @@ __device__ int getIdx3D(int dimx, int dimy, int dimz, int x, int y, int z) {
     return -1;
 }
 
-__global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGrid3D::Point *pointcloud, int n, int dimX, int dimY, int dimZ, float cellSize, int freeVoxelsMargin, int robotVoxelsHeight) {
+__global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGrid3D::Point *pointcloud, int n, int dimX, int dimY, int dimZ, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     // check if point is within the pointcloud vector of lenght n
@@ -256,7 +256,7 @@ void CudaGrid3D::insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePoint
     int numBlocks = (sizePointcloud + 256) / 256;
     // printf("Size of pointcloud: %d\n", sizePointcloud);
 
-    insertPointcloudKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, d_pointcloud, sizePointcloud, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->cellSize, h_map->freeVoxelsMargin, h_map->robotVoxelsHeight);
+    insertPointcloudKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, d_pointcloud, sizePointcloud, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->cellSize, h_map->floorVoxelsMargin, h_map->robotVoxelsHeight);
     // cudaDeviceSynchronize();
 }
 
@@ -307,7 +307,7 @@ __global__ void generateRandomPcKernel(CudaGrid3D::Point *pointcloud, int n, cur
     }
 }
 
-void CudaGrid3D::generateRandomPointcloud(Map *h_map, Point *pointcloud, int sizePointcloud) {
+void CudaGrid3D::generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int sizePointcloud) {
     int numBlocks = (sizePointcloud + 256) / 256;
 
     // state for the generation of random numbers in kernel code
@@ -316,7 +316,10 @@ void CudaGrid3D::generateRandomPointcloud(Map *h_map, Point *pointcloud, int siz
     // allocate the space for state on the gpu
     cudaMalloc((void **)&d_state, sizeof(curandState) * sizePointcloud);
 
-    generateRandomPcKernel<<<numBlocks, 256>>>(pointcloud, sizePointcloud, d_state, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->cellSize);
+    // allocate and initialize the pointcloud on the device memory
+    initDevicePointcloud(d_pointcloud, sizePointcloud);
+
+    generateRandomPcKernel<<<numBlocks, 256>>>(*d_pointcloud, sizePointcloud, d_state, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->cellSize);
 
     cudaFree(d_state);
 
@@ -1006,7 +1009,7 @@ void CudaGrid3D::pointcloudRayTracing(Map *h_map, CudaGrid3D::Point *d_pointclou
     cudaDeviceSynchronize();
 }
 
-__global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int freeVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int minOccupiedConfidence) {
+__global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int floorVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int minOccupiedConfidence) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     int numPlaneCells = dimX * dimY;
@@ -1016,12 +1019,12 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
         int countOccupied = 0;
 
         // height of the robot after floor margin remotion
-        int scanHeight = robotVoxelsHeight - freeVoxelsMargin;
+        int scanHeight = robotVoxelsHeight - floorVoxelsMargin;
 
         int x = (tid / dimY);
         int y = tid - (x * dimY);
 
-        for (int z = freeVoxelsMargin; z < robotVoxelsHeight; z++) {
+        for (int z = floorVoxelsMargin; z < robotVoxelsHeight; z++) {
             // int idx3D = y + x * dimY + z * dimX * dimY;
             int idx3D = getIdx3D(dimX, dimY, dimZ, x, y, z);
 
@@ -1117,7 +1120,7 @@ void CudaGrid3D::updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfi
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
-    int minZ = h_map->freeVoxelsMargin;
+    int minZ = h_map->floorVoxelsMargin;
     int maxZ = h_map->robotVoxelsHeight;
 
     // maxUnknownConfidence must be lower than minOccupiedConfidence

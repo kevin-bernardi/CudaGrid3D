@@ -66,7 +66,7 @@ void initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int length)
 void freeDevicePointcloud(Point *d_pointcloud);
 
 // generates a pointcloud with n random points
-void generateRandomPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud);
+void generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int sizePointcloud);
 
 // checks if the grid is legal
 // void checkGrid(Map *h_map);

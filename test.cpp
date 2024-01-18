@@ -43,8 +43,7 @@ int main(int argc, char* argv[]) {
 
     CudaGrid3D::Point* d_pointcloud;
 
-    initDevicePointcloud(&d_pointcloud, numPoints);
-    generateRandomPointcloud(h_map, d_pointcloud, numPoints);
+    generateRandomPointcloud(h_map, &d_pointcloud, numPoints);
     insertPointcloud(h_map, d_pointcloud, numPoints);
 
     pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori, false);
