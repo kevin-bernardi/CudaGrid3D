@@ -4,10 +4,7 @@ SHARED_LIB_NAME=lib$(PROGRAM)
 EXECUTABLE=test
 
 INCLUDE_OPENCV=-I/usr/include/opencv4/
-#INCLUDE_STAR=-I/home/serl/STAR/AutonomousRobots/Libraries/star/include
-
 LIBS_OPENCV=-lopencv_core -lopencv_highgui
-#LIBS_STAR=-L/home/serl/STAR/AutonomousRobots/Libraries/star/lib/
 LIBS_CUDA=-L/usr/local/cuda/lib64 -lcuda -lcudart
 LIBS_CIMG=-L/usr/X11R6/lib -lm -lpthread -lX11
 LIBS_PROGRAM=-L./ -l$(PROGRAM)

@@ -1,9 +1,6 @@
 #ifndef GRID3D_H
 #define GRID3D_H
 
-// #include <opencv2/core/mat.hpp>
-// #include "star/robotics/math/Transform3D.hpp"
-
 #include <opencv2/highgui/highgui.hpp>
 
 namespace CudaGrid3D {
@@ -15,7 +12,7 @@ class Map {
     int dimX = 0;
     int dimY = 0;
     int dimZ = 0;
-    float resolution = 0.0;
+    float cellSize = 0.0;
     int freeVoxelsMargin = 0;
     int robotVoxelsHeight = 0;
 };
@@ -34,7 +31,7 @@ class CudaTransform3D {
 };
 
 // initialize the 3D Grid on the device
-void initMap(Map *h_map, int dimX, int dimY, int dimZ, float resolution, int freeVoxelsMargin, int robotVoxelsHeight);
+void initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int freeVoxelsMargin, int robotVoxelsHeight);
 
 // free vector (allocated on the host) and grid (allocated on the device) space
 void freeMap(Map *h_map);
@@ -77,9 +74,9 @@ void generateRandomPointcloud(Map *h_map, Point *d_pointcloud, int sizePointclou
 // checks if there are duplicates in the pointcloud (points with the same x,y,z coordinates)
 void checkDuplicates(Map *h_map, Point *d_pointcloud, int sizePointcloud);
 
-// Insert the points found in the cv:Mat matrix acquired by the zed camera.
-// This function accepts a converted
-void cvMatToPointcloud(float *h_array, int length, Point **d_pointcloud, bool enableRototranslation, CudaTransform3D tf);
+// Converts an array of points in the format [point0_x, point0_y, point0_z, point0_w, point1_x, point1_y, point1_z, point1_w, ...]
+// in a device pointcloud
+void arrayToPointcloud(float *h_array, int length, Point **d_pointcloud, bool enableRototranslation, CudaTransform3D tf);
 
 // ----- print functions -----
 
@@ -152,9 +149,6 @@ void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int oc
 
 // returns the cv::Mat of the 2D colored grid
 cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition);
-
-// test function (it's better to use the functions above in a cpp file and keep the .cu as simple as possible)
-int test(int dimX, int dimY, int dimZ, float resolution, int numPoints);
 
 }  // namespace CudaGrid3D
 

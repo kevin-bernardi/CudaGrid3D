@@ -12,19 +12,11 @@ float getTimeDifference(timeval t1, timeval t2) {
     return diff;
 }
 
-// void showcvImage() {
-//     Mat img(500, 500, CV_8UC3, Scalar(0, 0, 0));
-//     namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
-//     imshow("Image Test OpenCV", img);
-//     waitKey(0);
-//     return;
-// }
-
 int main(int argc, char* argv[]) {
     int dimX = 500;  // units
     int dimY = 500;
     int dimZ = 500;
-    float resolution = 0.1;
+    float cellSize = 0.1;
     int freeVoxelsMargin = 1;
     int robotVoxelsHeight = 5;
     int numPoints = 10000;
@@ -33,7 +25,7 @@ int main(int argc, char* argv[]) {
         dimX = std::stoi(argv[1]);
         dimY = std::stoi(argv[2]);
         dimZ = std::stoi(argv[3]);
-        resolution = std::stof(argv[4]);
+        cellSize = std::stof(argv[4]);
         freeVoxelsMargin = std::stof(argv[5]);
         robotVoxelsHeight = std::stof(argv[6]);
         numPoints = std::stoi(argv[7]);
@@ -47,7 +39,7 @@ int main(int argc, char* argv[]) {
     ori.z = 0.0;
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, resolution, freeVoxelsMargin, robotVoxelsHeight);
+    initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
 
     CudaGrid3D::Point* d_pointcloud;
 
