@@ -16,7 +16,8 @@
     - [Rototranslate the Pointcloud](#rototranslate-the-pointcloud)
   - [Create a Random Pointcloud](#create-a-random-pointcloud)
   - [Free Volume Computation](#free-volume-computation)
-  - [2D Occupancy Grid Generation](#2d-occupancy-grid-generation)
+  - [2D Grid Generation](#2d-grid-generation)
+  - [2D Occupancy Map Generation](#2d-occupancy-map-generation)
 
 ## Introduction
 
@@ -196,10 +197,10 @@ int main(){
     cvMatToArray(&pointcloud_raw, &h_arr, &length);
 
 
-    CudaTransform3D tf;
+    CudaGrid3D::CudaTransform3D tf;
 
     // convert an array of coordinates into a pointcloud without doing rototranslation
-    CudaGrid3D::arrayToPointcloud(h_arr, length, &d_pointcloud, false, tf);
+    arrayToPointcloud(h_arr, length, &d_pointcloud, false, tf);
 
     // insert the points in the 3D Grid
     // the number of points is length / 4 because the pointcloud is an array of Points while
@@ -287,7 +288,7 @@ Here is a short example:
     ...
 ```
 
-## 2D Occupancy Grid Generation
+## 2D Grid Generation
 
 The 2D occupancy grid is generated as a projection of the 3D grid. Only the cells inside the height interval of the robot are taken into account.
 To avoid the detection of the floor as an obstacle, only the cells above a certain threshold are considered.
@@ -298,12 +299,12 @@ Both variables must not use meters but number of cells (voxels).
 The `updateGrid2D` function generate the 2D occupancy grid.
 This function takes 3 thresholds as arguments:
 
-- freeThreshold 
+- freeThreshold (used for frontier detection)
 - maxUnknownConfidence
 - minOccupiedConfidence
 
 
-For each cell (x,y) in the 2D grid a number (grid2DCellValue) between 0 and 100 is computed:
+For each cell (x,y) in the 2D grid a occupied confidence value (grid2DCellValue) between 0 and 100 is computed:
 
 - if there are no occupied cells in the column (x,y):
     1. the ratio of unknown cells in the height of the robot (floor margin excluded) is calculated:
@@ -327,30 +328,70 @@ For each cell (x,y) in the 2D grid a number (grid2DCellValue) between 0 and 100 
 
         `grid2DCellValue = 100`
 
+## 2D Occupancy Map Generation
+
+The 2D occupancy map generation is generated based on the 2D Grid updated with the `updateGrid2D` function we seen in the previous paragraph.
+This function doesn't display anything nor generates or save any image because in the 2D grid we have saved in each cell the probability that the cell represents an obstacle (occupied cell).
+To generate an image the function `getGrid2D` has to be called.
+The function scans the entire 2D grid and compares each value with three new thresholds to paint the pixel image with a different color:
+- free threshold (green)
+- warning threshold (orange)
+- occcupied threshold (red)
+
+> The free threshold must be lower than the warning threshold.
+>
+> The warning threshold must be lower than the occupied threshold.
+
+- If `grid2DCellValue <= freeThreshold` the cell is marked as free;
+- if `grid2DCellValue > freeThreshold` and `grid2DCellValue < warningThreshold` the cell is marked as unknow;
+- if `grid2DCellValue >= warningThreshold` and `grid2DCellValue < occupiedThreshold` the cell is marked as "maybe occupied";
+- if `grid2DCellValue >= occupiedThreshold` the cell is marked as occupied;
+
+The function then return the image as a OpenCV `cv::Mat` object that can be displayed using for example the `cv::imshow`.
+
+The function can also prints a small circle in the occupancy map showing the robot position at the moment of the last grid update. To enable this feature just pass the robot position (CudaGrid3D::CudaTransform3D object) as the last argument of the `getGrid2D` function call.
+
+Here is an example on how to use both `updateGrid2D` and `getGrid2D`:
+
+```c++
+
+    ...
 
 
+    CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
+    initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+
+    // ...
+    // pointcloud insertion in the 3D grid
+    // ...
+
+    // ...
+    // free volume computation with ray tracing
+    // ...
+
+    // update the 2D grid using the 3D grid and the thresholds
+    updateGrid2D(h_map, freeThreshold, maxUnknownConfidence, minOccupiedConfidence);
+
+    
+
+    // occupancy grid without robot position
+    cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold)
 
 
+    // --- ALTERNATIVELY ---
+    // occupancy grid with robot position
+    // robot position
+    CudaGrid3D::CudaTransform3D robot_position;
 
+    cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold, &robot_position)
+    // ---------------------
 
+    // display the occupancy 2D map
+    cv::imshow("Occupancy Map", occupancyMap);
+    cv::waitKey(10);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    ...
+```
 
 
 
