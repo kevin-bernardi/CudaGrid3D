@@ -1,6 +1,6 @@
 # CudaGrid3D
 
-[Functions Reference Page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/REFERENCE.md)
+[Functions Reference Page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/reference.md)
 
 ## Table of Contents
 
@@ -86,7 +86,7 @@ The 2D Grid is simply a projection of the 3D Grid and the user cannot insert the
 
 This guide explains the general workflow needed for pointcloud insertion, free space computation, occupancy grid update and 3D mesh generation.
 The guide does not explain the complete list of arguments for each function.
-Each function is documented in greater detail in the [functions reference page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/REFERENCE.md).
+Each function is documented in greater detail in the [functions reference page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/reference.md).
 
 A complete example can be found [here](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/example.cpp).
 
