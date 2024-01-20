@@ -1250,7 +1250,7 @@ void CudaGrid3D::getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThres
     dimY = dimY_bin;
 }
 
-Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition) {
+Mat CudaGrid3D::getGrid2DOperation(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, bool displayRobotPosition, CudaTransform3D *robotPosition) {
     Mat error_img;
 
     if (freeThreshold >= warningThreshold || freeThreshold >= occupiedThreshold) {
@@ -1321,4 +1321,13 @@ Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, i
     cv::circle(data, robot_circle_center, radius, robot_position_color, FILLED);
 
     return data;
+}
+
+Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+    CudaGrid3D::CudaTransform3D tf;
+    return CudaGrid3D::getGrid2DOperation(h_map, freeThreshold, warningThreshold, occupiedThreshold, false, &tf);
+}
+
+Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition) {
+    return CudaGrid3D::getGrid2DOperation(h_map, freeThreshold, warningThreshold, occupiedThreshold, true, robotPosition);
 }

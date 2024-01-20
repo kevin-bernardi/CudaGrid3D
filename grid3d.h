@@ -151,6 +151,7 @@ void updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int m
 void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold, int *&output_grid_2d_binned, int &dimX, int &dimY);
 
 // returns the cv::Mat of the 2D colored grid
+cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold);
 cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition);
 
 }  // namespace CudaGrid3D

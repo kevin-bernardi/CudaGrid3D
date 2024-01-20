@@ -10,6 +10,9 @@
   - [generateMesh](#generatemesh)
   - [generateSimpleMesh](#generatesimplemesh)
   - [pointcloudRayTracing](#pointcloudraytracing)
+  - [updateGrid2D](#updategrid2d)
+  - [getUnknownDensityGrid2D](#getunknowndensitygrid2d)
+  - [getGrid2D](#getgrid2d)
 
 
 ## initMap
@@ -134,7 +137,7 @@ Generate a simple mesh of the 3D grid (only a vertex for each occupied cell).
 
 `void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, Point origin, bool freeObstacles)`
 
-Run the ray tracing algorithm to find free cells in the 3D grid
+Run the ray tracing algorithm to find free cells in the 3D grid.
 
 | Parameter      | Description                                      |
 | -------------- | ------------------------------------------------ |
@@ -144,7 +147,60 @@ Run the ray tracing algorithm to find free cells in the 3D grid
 | origin         | Origin point (camera coordinates)                |
 | freeObstacles  | If true the occupied cells can be marked as free |
 
+## updateGrid2D
 
+`void updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int minOccupiedConfidence)`
+
+Update the 2D grid using the data contained in the 3D grid (projection).
+
+| Parameter             | Description                                             |
+| --------------------- | ------------------------------------------------------- |
+| h_map                 | Map struct                                              |
+| freeThreshold         | Max confidence to be marked free                        |
+| maxUnknownConfidence  | Max confidence if every cell in the column is unknown   |
+| minOccupiedConfidence | Min confidence if only 1 cell is occupied in the column |
+
+
+## getUnknownDensityGrid2D
+
+`void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int occupiedThreshold, int *&output_grid_2d_binned, int &dimX, int &dimY)`
+
+Get a binned (reduced in resolution) density 2D grid
+
+| Parameter             | Description                        |
+| --------------------- | ---------------------------------- |
+| h_map                 | Map struct                         |
+| bin_size              | Binning size (bin_size x bin_size) |
+| freeThreshold         | Max confidence of a free cell      |
+| occupiedThreshold     | Min confidence of an occupied cell |
+| output_grid_2d_binned | The output binned grid             |
+| dimX                  | dimX of the output density grid    |
+| dimY                  | dimY of the output density grid    |
+
+## getGrid2D
+
+`cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold)`
+
+Get a displayable 2D occupancy grid
+
+| Parameter         | Description                          |
+| ----------------- | ------------------------------------ |
+| h_map             | Map struct                           |
+| freeThreshold     | Max confidence for a free pixel      |
+| warningThreshold  | Min confidence for a warning pixel   |
+| occupiedThreshold | Min confidence for an occupied pixel |
+
+`cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition)`
+
+Get a displayable 2D occupancy grid with an indicator of the robot position
+
+| Parameter         | Description                          |
+| ----------------- | ------------------------------------ |
+| h_map             | Map struct                           |
+| freeThreshold     | Max confidence for a free pixel      |
+| warningThreshold  | Min confidence for a warning pixel   |
+| occupiedThreshold | Min confidence for an occupied pixel |
+| robotPosition     | Coordinate position of the robot     |
 
 
 
