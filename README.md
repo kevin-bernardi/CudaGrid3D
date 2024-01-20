@@ -17,7 +17,9 @@
   - [Create a Random Pointcloud](#create-a-random-pointcloud)
   - [Free Volume Computation](#free-volume-computation)
   - [2D Grid Generation](#2d-grid-generation)
+    - [Frontier Detection](#frontier-detection)
   - [2D Occupancy Map Generation](#2d-occupancy-map-generation)
+  - [3D Mesh Generation](#3d-mesh-generation)
 
 ## Introduction
 
@@ -58,10 +60,10 @@ Then you can link the library using for example:
 g++ -o program application.cpp -L{cudaGrid3D .so file path} -lgrid3d
 ```
 
-or if you also use openCV based functions:
+or if you also use OpenCV based functions:
 
 ```shell
-g++ -o program application.cpp -L{cudaGrid3D .so file path} -lgrid3d -lopencv_core -lopencv_highgui -I{opencv path}
+g++ -o program application.cpp -L{cudaGrid3D .so file path} -lgrid3d -lopencv_core -lopencv_highgui -I{OpenCV path}
 ```
 
 ## How does the 3D Grid works?
@@ -79,6 +81,12 @@ A smaller cell size results in a more precise 2D/3D map but at the cost of more 
 The 2D Grid is simply a projection of the 3D Grid and the user cannot insert the points directly in the 2D Grid.
 
 # Guide
+
+This guide explains the general workflow needed for pointcloud insertion, free space computation, occupancy grid update and 3D mesh generation.
+The guide does not explain the complete list of arguments for each function.
+Each function is documented in greater detail in the [functions reference page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/reference.md).
+
+A complete example can be found [here](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/example.cpp).
 
 ## Conventions
 
@@ -221,10 +229,10 @@ In the example above we disabled the rototranslation by setting the fourth argum
 
 ## Create a Random Pointcloud
 
-For testing purposes the library also provide the function `generateRandomPointcloud` that generated a pointcloud allocated on the device memory with N random points within the bounds of the 3D Grid.
+For testing purposes the library also provide the function `generateRandomPointcloud` that generates a pointcloud allocated on the device memory with N random points within the bounds of the 3D Grid.
 This pointcloud can be directly inserted in the 3D Grid by using the `insertPointcloud` function.
 
-The `generateRandomPointcloud` function doesn't require the pointcloud initialization to avoid memory size mismatches (like `arrayToPointcloud`).
+The `generateRandomPointcloud` function doesn't require the pointcloud initialization (like `arrayToPointcloud`).
 
 
 ```c++
@@ -246,7 +254,7 @@ The `generateRandomPointcloud` function doesn't require the pointcloud initializ
 
 ## Free Volume Computation
 
-The free volume computation is done with ray-tracing.
+The free volume computation is done with ray-tracing in the 3D grid.
 A ray is casted for each point in the pointcloud. The ray starts at the coordinates of the camera and ends at the coordinates of the point in the pointcloud.
 The rays pass through some cells that are marked as free. The ray stops before reaching the destination (the point of the pointcloud) if it encounters an obstacle.
 
@@ -304,7 +312,7 @@ This function takes 3 thresholds as arguments:
 - minOccupiedConfidence
 
 
-For each cell (x,y) in the 2D grid a occupied confidence value (grid2DCellValue) between 0 and 100 is computed:
+For each cell `(x,y, z>= floorVoxelsMargin and z < robotVoxelsHeight)` in the 2D grid a occupied confidence value (grid2DCellValue) between 0 and 100 is computed:
 
 - if there are no occupied cells in the column (x,y):
     1. the ratio of unknown cells in the height of the robot (floor margin excluded) is calculated:
@@ -328,9 +336,13 @@ For each cell (x,y) in the 2D grid a occupied confidence value (grid2DCellValue)
 
         `grid2DCellValue = 100`
 
+### Frontier Detection
+
+When the function `updateGrid2D` is called, after the 2D grid update an algorithm for frontier detection is runned. The frontier detection algorithm marks as frontier all the free cells on the 2D grid which have at least a common side to an unknown cell.
+
 ## 2D Occupancy Map Generation
 
-The 2D occupancy map generation is generated based on the 2D Grid updated with the `updateGrid2D` function we seen in the previous paragraph.
+The 2D occupancy map generation is generated based on the 2D grid updated with the `updateGrid2D` function we seen in the previous paragraph.
 This function doesn't display anything nor generates or save any image because in the 2D grid we have saved in each cell the probability that the cell represents an obstacle (occupied cell).
 To generate an image the function `getGrid2D` has to be called.
 The function scans the entire 2D grid and compares each value with three new thresholds to paint the pixel image with a different color:
@@ -342,12 +354,19 @@ The function scans the entire 2D grid and compares each value with three new thr
 >
 > The warning threshold must be lower than the occupied threshold.
 
-- If `grid2DCellValue <= freeThreshold` the cell is marked as free;
-- if `grid2DCellValue > freeThreshold` and `grid2DCellValue < warningThreshold` the cell is marked as unknow;
-- if `grid2DCellValue >= warningThreshold` and `grid2DCellValue < occupiedThreshold` the cell is marked as "maybe occupied";
-- if `grid2DCellValue >= occupiedThreshold` the cell is marked as occupied;
+> Frontier cells are not compared to any threshold.
 
-The function then return the image as a OpenCV `cv::Mat` object that can be displayed using for example the `cv::imshow`.
+The image has the same size as the 2D grid and the cell with coordinates (x1, y1) is represented by the image pixel with the same coordinates (x1, y1). The first cell in the 2D grid corresponds to the first pixel in the occupancy map image.
+
+The algorithm scans the 2D grid and paints the pixels of the occupancy map in the following way:
+- If `grid2DCellValue <= freeThreshold` the pixel image is painted green (free cell);
+- if `grid2DCellValue > freeThreshold` and `grid2DCellValue < warningThreshold` the pixel image is painted grey (unknown cell);
+- if `grid2DCellValue >= warningThreshold` and `grid2DCellValue < occupiedThreshold` the pixel image is painted as orange (maybe occupied cell);
+- if `grid2DCellValue >= occupiedThreshold` the pixel image is painted red (occupied cell);
+- if the grid2DCell is a frontier cell then the pixel image is painted blue (frontier cell).
+
+
+The function then return the image as a OpenCV `cv::Mat` object that can be displayed using for example the `cv::imshow` function (OpenCV).
 
 The function can also prints a small circle in the occupancy map showing the robot position at the moment of the last grid update. To enable this feature just pass the robot position (CudaGrid3D::CudaTransform3D object) as the last argument of the `getGrid2D` function call.
 
@@ -373,7 +392,6 @@ Here is an example on how to use both `updateGrid2D` and `getGrid2D`:
     updateGrid2D(h_map, freeThreshold, maxUnknownConfidence, minOccupiedConfidence);
 
     
-
     // occupancy grid without robot position
     cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold)
 
@@ -392,6 +410,47 @@ Here is an example on how to use both `updateGrid2D` and `getGrid2D`:
 
     ...
 ```
+
+## 3D Mesh Generation
+
+The library let you generate a 3D mesh in Wavefront format (.obj).
+
+Call the `generateMesh` function to generate a mesh of the entire 3D Grid at the specified path.
+This function creates a cube for each cell marked as occupied and can quicly increase in size for big 3D grids (> 1 GB).
+
+For this reason the library provides the function `generateSimpleMesh` which generates a simple mesh where a vertex (and not a cube) is created for each cell marked as occupied.
+
+The mesh file can be later imported in any 3D viewer application.
+
+> The simple mesh file support is very limited because many viewers can't display meshes without faces. Blender is a great and free 3D manipulation tool that lets you import also a simple mesh.
+
+Here is a simple example for 3D mesh generation:
+
+```c++
+
+    ...
+
+
+    CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
+    initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+
+    // ...
+    // pointcloud insertion in the 3D grid
+    // ...
+
+    // ...
+    // free volume computation with ray tracing
+    // ...
+
+    // complete mesh generation
+    generateMesh(h_map, "./mesh.obj");
+
+    // simple mesh generation
+    generateSimpleMesh(h_map, "./simple_mesh.obj");
+
+    ...
+```
+
 
 
 

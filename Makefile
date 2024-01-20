@@ -1,12 +1,11 @@
 PROGRAM=grid3d
-CPP_FILE=test.cpp
+CPP_FILE=example.cpp
 SHARED_LIB_NAME=lib$(PROGRAM)
 EXECUTABLE=test
 
 INCLUDE_OPENCV=-I/usr/include/opencv4/
 LIBS_OPENCV=-lopencv_core -lopencv_highgui
 LIBS_CUDA=-L/usr/local/cuda/lib64 -lcuda -lcudart
-LIBS_CIMG=-L/usr/X11R6/lib -lm -lpthread -lX11
 LIBS_PROGRAM=-L./ -l$(PROGRAM)
 
 
