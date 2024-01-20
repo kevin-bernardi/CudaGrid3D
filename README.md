@@ -1,5 +1,7 @@
 # CudaGrid3D
 
+[Functions Reference Page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/REFERENCE.md)
+
 ## Table of Contents
 
 - [CudaGrid3D](#cudagrid3d)
@@ -84,7 +86,7 @@ The 2D Grid is simply a projection of the 3D Grid and the user cannot insert the
 
 This guide explains the general workflow needed for pointcloud insertion, free space computation, occupancy grid update and 3D mesh generation.
 The guide does not explain the complete list of arguments for each function.
-Each function is documented in greater detail in the [functions reference page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/reference.md).
+Each function is documented in greater detail in the [functions reference page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/REFERENCE.md).
 
 A complete example can be found [here](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/example.cpp).
 
@@ -137,10 +139,9 @@ The `pointX_w` is not used by the function so if your array has only 3 coordinat
 > This object can be easily be converted to a classic array and then passed in the `arrayToPointcloud` function explained before.
 > More informations about cv::Mat to array conversion can be found here: https://stackoverflow.com/questions/26681713/convert-mat-to-array-vector-in-opencv
 
+Here are shown two examples about pointcloud creation and conversion.
 
-Here are shown two examples that should be useful in understanding better how all this works.
-
-Example 1: the pointcloud has already the right type
+Example 1: the pointcloud has already the right type:
 
 
 ```c++
@@ -170,7 +171,7 @@ initDevicePointcloud(&d_pointcloud, h_pointcloud, numPoints);
 insertPointcloud(h_map, d_pointcloud, numPoints);
 ```
 
-Example 2: the camera gives a cv::Mat containing the points
+Example 2: the camera gives a cv::Mat containing the points:
 
 ```c++
 
@@ -204,11 +205,8 @@ int main(){
     
     cvMatToArray(&pointcloud_raw, &h_arr, &length);
 
-
-    CudaGrid3D::CudaTransform3D tf;
-
     // convert an array of coordinates into a pointcloud without doing rototranslation
-    arrayToPointcloud(h_arr, length, &d_pointcloud, false, tf);
+    arrayToPointcloud(h_arr, length, &d_pointcloud);
 
     // insert the points in the 3D Grid
     // the number of points is length / 4 because the pointcloud is an array of Points while
@@ -225,7 +223,8 @@ int main(){
 ### Rototranslate the Pointcloud
 
 The function `arrayToPointcloud` can also rototranslate all the points based on the CudaTransform3D object passed to the function. The CudaTransform3D is a struct that contains the vector of translation and the matrix of rotation. These informations are needed to rotate and translate the pointcloud.
-In the example above we disabled the rototranslation by setting the fourth argument to false and passing a default CudaTransform3D as the last argument of the function.
+To rototranslate the pointcloud just pass the CudaTransform3D as the last argument of the function.
+
 
 ## Create a Random Pointcloud
 

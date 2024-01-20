@@ -7,11 +7,6 @@
 using namespace cv;
 using namespace CudaGrid3D;
 
-float getTimeDifference(timeval t1, timeval t2) {
-    float diff = ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000.0;
-    return diff;
-}
-
 int main(int argc, char* argv[]) {
     int dimX = 500;  // units
     int dimY = 500;
@@ -60,6 +55,4 @@ int main(int argc, char* argv[]) {
     waitKey(0);
 
     generateMesh(h_map, "./compl_mesh.obj");
-
-    // generateMeshGrid2D(h_map, "suino.obj");
 }

@@ -30,10 +30,10 @@ class CudaTransform3D {
     double rot[3][3];
 };
 
-// initialize the 3D Grid on the device
+// initialize the Map on the host and the grids (2D and 3D) on the device
 void initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int freeVoxelsMargin, int robotVoxelsHeight);
 
-// free vector (allocated on the host) and grid (allocated on the device) space
+// free struct (allocated on the host) and the grids (allocated on the device)
 void freeMap(Map *h_map);
 
 void getCoordinatesInv2D(Map *h_map, int index, int *result);
@@ -49,9 +49,6 @@ int getLinearIndex2D(Map *h_map, int x, int y);
 // calculate the 1D index of the 3D grid with the 3D coordinates (x,y,z)
 int getLinearIndex3D(Map *h_map, int x, int y, int z);
 
-// insert the points of the pointcloud in the 3D Grid
-void insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud);
-
 // initialize a pointcloud on the device (GPU)
 // the address of the pointer to the pointcloud must be passed because the allocation of the pointcloud
 // is done on the device through a kernel function
@@ -60,13 +57,16 @@ void initDevicePointcloud(Point **d_pointcloud, int length);
 // initialize a pointcloud on the device (GPU) with the points of another pointcloud allocated on the host
 // the address of the pointer to the pointcloud must be passed because the allocation of the pointcloud
 // is done on the device through a kernel function
-void initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int length);
+void initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int sizePointcloud);
 
 // free allocated space by pointcloud on the device
 void freeDevicePointcloud(Point *d_pointcloud);
 
 // generates a pointcloud with n random points
 void generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int sizePointcloud);
+
+// insert the points of the pointcloud in the 3D Grid
+void insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud);
 
 // checks if the grid is legal
 // void checkGrid(Map *h_map);
@@ -76,7 +76,9 @@ void checkDuplicates(Map *h_map, Point *d_pointcloud, int sizePointcloud);
 
 // Converts an array of points in the format [point0_x, point0_y, point0_z, point0_w, point1_x, point1_y, point1_z, point1_w, ...]
 // in a device pointcloud
-void arrayToPointcloud(float *h_array, int length, Point **d_pointcloud, bool enableRototranslation, CudaTransform3D tf);
+void arrayToPointcloud(float *h_pc_array, int length, Point **d_pointcloud);
+
+void arrayToPointcloud(float *h_pc_array, int length, Point **d_pointcloud, CudaTransform3D tf);
 
 // ----- print functions -----
 
@@ -128,7 +130,8 @@ void printPointcloud(Point *d_pointcloud, int sizePointcloud);
 // void cubeVertex(FILE *file, float res, float x, float y, float z);
 // void cubeFace(FILE *file, int nCube);
 
-void generateMeshGrid2D(Map *h_map, const char *path);
+// void generateMeshGrid2D(Map *h_map, const char *path);
+
 void generateMesh(Map *h_map, const char *path);
 void generateSimpleMesh(Map *h_map, const char *path, bool isOccupationMesh);
 
@@ -136,7 +139,7 @@ void generateSimpleMesh(Map *h_map, const char *path, bool isOccupationMesh);
 
 // ray tracing to find free cells
 // rays starts at origin and ends at the first encountered obstacle in its own direction
-void pointcloudRayTracing(Map *h_map, Point *pointcloud, int sizePointcloud, Point origin, bool freeObstacles);
+void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, Point origin, bool freeObstacles);
 
 // update occupied, free and unknown cells of the 2D grid using the data from 3D grid
 // maxUnknownConfidence is the confidence set if every voxel inside the height interval of the robot

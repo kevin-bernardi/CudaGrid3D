@@ -260,14 +260,14 @@ void CudaGrid3D::insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePoint
     // cudaDeviceSynchronize();
 }
 
-void CudaGrid3D::initDevicePointcloud(Point **d_pointcloud, int length) {
-    cudaMalloc((void **)d_pointcloud, sizeof(Point) * length);
+void CudaGrid3D::initDevicePointcloud(Point **d_pointcloud, int sizePointcloud) {
+    cudaMalloc((void **)d_pointcloud, sizeof(Point) * sizePointcloud);
 }
 
-void CudaGrid3D::initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int length) {
-    cudaMalloc((void **)d_pointcloud, sizeof(Point) * length);
+void CudaGrid3D::initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int sizePointcloud) {
+    cudaMalloc((void **)d_pointcloud, sizeof(Point) * sizePointcloud);
 
-    cudaMemcpy(*d_pointcloud, h_pointcloud, sizeof(Point) * length, cudaMemcpyHostToDevice);
+    cudaMemcpy(*d_pointcloud, h_pointcloud, sizeof(Point) * sizePointcloud, cudaMemcpyHostToDevice);
 }
 
 void CudaGrid3D::freeDevicePointcloud(Point *d_pointcloud) {
@@ -823,7 +823,7 @@ __global__ void arrToPointcloudKernel(CudaGrid3D::Point *d_pointcloud, float *d_
     }
 }
 
-void CudaGrid3D::arrayToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, bool enableRototranslation, CudaTransform3D tf) {
+void CudaGrid3D::arrayToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud) {
     float *d_cvmat_arr;
     cudaMalloc(&d_cvmat_arr, sizeof(float) * length);
 
@@ -836,7 +836,29 @@ void CudaGrid3D::arrayToPointcloud(float *h_cvmat_arr, int length, Point **d_poi
 
     // call kernel function
     int numBlocks = (numPoints + 256) / 256;
-    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_cvmat_arr, length, enableRototranslation, tf);
+    CudaTransform3D tf;
+    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_cvmat_arr, length, false, tf);
+
+    // free device memory
+    cudaFree(d_cvmat_arr);
+
+    // cudaDeviceSynchronize();
+}
+
+void CudaGrid3D::arrayToPointcloud(float *h_cvmat_arr, int length, Point **d_pointcloud, CudaTransform3D tf) {
+    float *d_cvmat_arr;
+    cudaMalloc(&d_cvmat_arr, sizeof(float) * length);
+
+    // copy the content of host cvmat_arr to device
+    cudaMemcpy(d_cvmat_arr, h_cvmat_arr, sizeof(float) * length, cudaMemcpyHostToDevice);
+
+    // initialize the pointcloud that holds the points found in the input matrix
+    int numPoints = length / 4;
+    initDevicePointcloud(d_pointcloud, numPoints);
+
+    // call kernel function
+    int numBlocks = (numPoints + 256) / 256;
+    arrToPointcloudKernel<<<numBlocks, 256>>>(*d_pointcloud, d_cvmat_arr, length, true, tf);
 
     // free device memory
     cudaFree(d_cvmat_arr);
