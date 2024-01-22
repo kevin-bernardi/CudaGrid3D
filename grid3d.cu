@@ -1014,10 +1014,10 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
                     // do not check if it's an obstacles, set it as free anyway
                     d_grid_3D[idx3D] = FREE_CELL;
                 } else if (!freeObstacles && d_grid_3D[idx3D] != OCCUPIED_CELL) {
-                    // check if obstacle
+                    // the cell is not an obstacle
                     d_grid_3D[idx3D] = FREE_CELL;
                 } else if (!freeObstacles && d_grid_3D[idx3D == OCCUPIED_CELL]) {
-                    // interrupt the ray if we encounter an obstacle before its end
+                    // interrupt the ray, we encountered an obstacle before its end
                     break;
                 }
             }
