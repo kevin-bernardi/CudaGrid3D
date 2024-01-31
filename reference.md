@@ -70,11 +70,15 @@ Initialize a pointcloud in the device memory and copy the host pointcloud in the
 
 Free the pointcloud space allocated in the device memory.
 
+| Parameter    | Description |
+| ------------ | ----------- |
+| d_pointcloud | Pointcloud  |
+
 ## insertPointcloud
 
 `void insertPointcloud(Map *h_map, Point *d_pointcloud, int numPoints)`
 
-Inserts the points of the pointcloud in the 3D grid
+Inserts the points of the pointcloud in the 3D grid.
 
 | Parameter    | Description                        |
 | ------------ | ---------------------------------- |
@@ -175,7 +179,7 @@ Update the 2D grid using the data contained in the 3D grid (projection).
 | Parameter             | Description                                             |
 | --------------------- | ------------------------------------------------------- |
 | h_map                 | Map struct                                              |
-| freeThreshold         | Max confidence to be marked free                        |
+| freeThreshold         | Max confidence to mark a cell as free                   |
 | maxUnknownConfidence  | Max confidence if every cell in the column is unknown   |
 | minOccupiedConfidence | Min confidence if only 1 cell is occupied in the column |
 
