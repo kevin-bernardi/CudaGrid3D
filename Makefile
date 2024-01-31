@@ -4,13 +4,13 @@ SHARED_LIB_NAME=lib$(PROGRAM)
 EXECUTABLE=test
 
 INCLUDE_OPENCV=-I/usr/include/opencv4/
-LIBS_OPENCV=-lopencv_core -lopencv_highgui
+LIBS_OPENCV=-lopencv_highgui -lopencv_imgproc -lopencv_core
 LIBS_CUDA=-L/usr/local/cuda/lib64 -lcuda -lcudart
 LIBS_PROGRAM=-L./ -l$(PROGRAM)
 
 
 build: $(EXECUTABLE)
-	mkdir -p output/cuda_grid_3d
+	mkdir -p ./output/cuda_grid_3d
 	cp $(SHARED_LIB_NAME).so ./output/cuda_grid_3d/$(SHARED_LIB_NAME).so
 	mkdir -p ./output/cuda_grid_3d/include
 	cp $(PROGRAM).h ./output/cuda_grid_3d/include/$(PROGRAM).h

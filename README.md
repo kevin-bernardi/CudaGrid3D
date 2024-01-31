@@ -64,7 +64,7 @@ g++ -o program application.cpp -L{cudaGrid3D .so file path} -lgrid3d
 or if you also use OpenCV based functions
 
 ```shell
-g++ -o program application.cpp -L{cudaGrid3D .so file path} -lgrid3d -lopencv_core -lopencv_highgui -I{OpenCV path}
+g++ -o program application.cpp -L{cudaGrid3D .so file path} -lgrid3d -lopencv_highgui -lopencv_imgproc -lopencv_core -I{OpenCV path}
 ```
 
 ## How does the 3D Grid works?
@@ -81,13 +81,13 @@ Each cell can have 4 possible values:
 
 A smaller cell size results in a more precise 2D/3D map but at the cost of more computational work.
 
-The 2D grid is simply a projection of the 3D grid and the user cannot insert the points directly in the 2D grid.
+The 2D grid is a projection of the 3D grid and the user cannot insert the points directly in the 2D grid.
 
 # Guide
 
 This guide explains the general workflow needed for pointcloud insertion, free space computation, occupancy grid update and 3D mesh generation.
 The guide does not explain the complete list of arguments for each function.
-Each function is documented in greater detail in the [functions reference page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/reference.md).
+Each function is documented in detail in the [functions reference page](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/reference.md).
 
 
 A complete example of the library usage can be found [here](https://github.com/kevin-bernardi/CudaGrid3D/blob/main/example.cpp).
@@ -104,24 +104,24 @@ Pointers pointing to an allocated space in the RAM (called host memory) are mark
 The first step to do before inserting pointclouds in the 3D Grid is to initialize the Map, a struct that holds the 2D Grid, the 3D Grid and all the parameters that are needed to make them work as expected.
 To initialize the map just call the function `initMap`. Below you can see a Map initialization of a 3D grid of size 200 x 100 x 50 cells and a 2D grid of size 200 x 100 cells. Both grids have a cell size of 10 centimeters.
 
-The last 2 arguments (freeVoxelsMargin and robotVoxelsHeight) are used to compute the 2D Grid from the 3D grid and can be overlooked until the occupation map is explained later.
+The last 2 arguments (floorVoxelsMargin and robotVoxelsHeight) are used to compute the 2D Grid from the 3D grid and can be overlooked at the moment until the occupation map is explained later.
 
 ```c++
 #include "grid3d.h"
 
-....
+[...]
 
 int dimX = 200;
 int dimY = 100;
 int dimZ = 50;
 float cellSize = 0.10;
-int freeVoxelsMargin = 1;
+int floorVoxelsMargin = 1;
 int robotVoxelsHeight = 5;
 
 CudaGrid3D::Map* h_map = new CudaGrid3D::Map;  
 // the map is allocated on the host memory
 
-initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 ```
 
 > WARNING: The grids contained in the `Map` can't be directly accessed because are allocated on the device memory. The grids can be accessed or manipulated using only the functions provided by the library.
@@ -131,7 +131,7 @@ initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
 A pointcloud is an array of points representing obstacles in the environment. Each point of the pointcloud is inserted in the correct cell of the 3D grid and marked the cell as occupied.
 
 A pointcloud can be inserted in the 3D Grid using the function `insertPointcloud`.
-This function accepts an array of `CudaGrid3D::Point` allocated on the device memory. The points acquired must be converted to the type the library uses and then copy the data on a pointcloud allocated on the device memory using `initDevicePointcloud`.
+This function accepts an array of `CudaGrid3D::Point` allocated on the device memory. Therefore, the points acquired must be converted to the type the library uses and then copy the data on a pointcloud allocated on the device memory using `initDevicePointcloud`.
 
 The coordinates of the points are expressed in meters.
 
@@ -150,7 +150,7 @@ Example 1: the pointcloud has already the right type:
 
 ```c++
 CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
 CudaGrid3D::Point* d_pointcloud;
 
@@ -191,11 +191,11 @@ void cvMatToArray(cv::Mat* cv_matrix, float** result, int* result_length) {
 
 int main(){
 
-    ...
+    [...]
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     // pointcloud_raw is the data received by a sensor / camera etc.
     cv::Mat pointcloud_raw;
@@ -209,7 +209,7 @@ int main(){
     
     cvMatToArray(&pointcloud_raw, &h_arr, &length);
 
-    // convert an array of coordinates into a pointcloud without doing rototranslation
+    // convert an array of coordinates into a pointcloud without rototranslations
     arrayToPointcloud(h_arr, length, &d_pointcloud);
 
     // insert the points in the 3D Grid
@@ -220,7 +220,7 @@ int main(){
     int numPoints = length / 4;
     insertPointcloud(h_map, d_pointcloud, numPoints);
 
-    ...
+    [...]
 }
 ```
 
@@ -242,19 +242,19 @@ The `generateRandomPointcloud` function doesn't require the pointcloud initializ
 
 ```c++
 
-    ...
+    [...]
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     CudaGrid3D::Point* d_pointcloud;
 
     generateRandomPointcloud(h_map, &d_pointcloud, numPoints);
     insertPointcloud(h_map, d_pointcloud, numPoints);
 
-    ...
-}
+
+    [...]
 ```
 
 ## Free Volume Computation
@@ -273,11 +273,11 @@ Here is a short example:
 
 ```c++
 
-    ...
+    [...]
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     CudaGrid3D::Point* d_pointcloud;
     int pointcloud_length;
@@ -298,13 +298,13 @@ Here is a short example:
 
     pointcloudRayTracing(h_map, d_pointcloud, pointcloud_length, camera_coords, freeObstacles);
 
-    ...
+    [...]
 ```
 
 ## 2D Grid Generation
 
 The 2D occupancy grid is generated as a projection of the 3D grid. Only the cells inside the height interval of the robot are taken into account.
-To avoid the detection of the floor as an obstacle, only the cells above a certain threshold are considered.
+To avoid the detection of the floor as an obstacle only the cells above a certain threshold are considered.
 Both the height of the robot and the floor threshold are defined as two variables inside the `Map` structure with the `initMap` function.
 The height of the robot is set with the `robotVoxelsHeight` variable and the floor threshold is set with the `floorVoxelsMargin` variable.
 Both variables must not use meters but number of cells (voxels).
@@ -375,17 +375,17 @@ The algorithm scans the 2D grid and paints the pixels of the occupancy map in th
 
 The function then returns the image as a OpenCV `cv::Mat` object that can be displayed using for example the `cv::imshow` function (OpenCV).
 
-The function can also print a small circle in the occupancy map showing the robot position at the moment of the last grid update. To enable this feature just pass the robot position (CudaGrid3D::CudaTransform3D object) as the last argument of the `getGrid2D` function call.
+The function can also print a marker (circle) in the occupancy map showing the robot position at the moment of the last grid update. To enable this feature just pass the robot position (CudaGrid3D::CudaTransform3D object) and the marker radius as the last two arguments of the `getGrid2D` function call.
 
 Here is an example on how to use both `updateGrid2D` and `getGrid2D`:
 
 ```c++
 
-    ...
+    [...]
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     // ...
     // pointcloud insertion in the 3D grid
@@ -395,37 +395,40 @@ Here is an example on how to use both `updateGrid2D` and `getGrid2D`:
     // free volume computation with ray tracing
     // ...
 
-    // update the 2D grid using the 3D grid and the thresholds
+    // update the 2D grid using the 3D grid (projection)
     updateGrid2D(h_map, freeThreshold, maxUnknownConfidence, minOccupiedConfidence);
 
     
-    // occupancy grid without robot position
-    cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold)
+    // occupancy grid without the robot position marker
+    cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold);
 
 
     // --- ALTERNATIVELY ---
-    // occupancy grid with robot position
+    // occupancy grid with the robot position marker
+
     // robot position
     CudaGrid3D::CudaTransform3D robot_position;
+    int marker_radius = 3;
 
-    cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold, &robot_position)
+    cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold, &robot_position, marker_radius);
     // ---------------------
 
     // display the occupancy 2D map
     cv::imshow("Occupancy Map", occupancyMap);
     cv::waitKey(10);
 
-    ...
+    [...]
 ```
 
 ## 3D Mesh Generation
 
 The library has a function to generate a 3D mesh in Wavefront format (.obj).
 
-Call the `generateMesh` function to generate a mesh of the entire 3D grid at the specified path.
+Call the `generateMesh3D` function to generate a mesh of the entire 3D grid at the specified path.
 This function creates a cube for each cell marked as occupied and can quicly increase in size for big 3D grids (> 1 GB).
 
-For this reason the library also provides the function `generateSimpleMesh` which generates a simple mesh where a vertex (and not a cube) is created for each cell marked as occupied.
+For this reason the library also provides the function `generateSimpleMesh3D` which generates a simple mesh where a vertex (and not a cube) is created for each cell marked as occupied.
+This function can also generate a mesh of the free space if the last argument (`isOccupationMesh`) is false.
 
 The mesh file can be later imported in any 3D viewer application.
 
@@ -435,11 +438,11 @@ Here is a simple example for 3D mesh generation:
 
 ```c++
 
-    ...
+    [...]
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, freeVoxelsMargin, robotVoxelsHeight);
+    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     // ...
     // pointcloud insertion in the 3D grid
@@ -450,12 +453,14 @@ Here is a simple example for 3D mesh generation:
     // ...
 
     // complete mesh generation
-    generateMesh(h_map, "./mesh.obj");
+    generateMesh3D(h_map, "./mesh.obj");
 
     // simple mesh generation
-    generateSimpleMesh(h_map, "./simple_mesh.obj");
 
-    ...
+    bool isOccupationMesh = true;
+    generateSimpleMesh3D(h_map, "./simple_mesh.obj", isOccupationMesh);
+
+    [...]
 ```
 
 

@@ -13,7 +13,7 @@ class Map {
     int dimY = 0;
     int dimZ = 0;
     float cellSize = 0.0;
-    int freeVoxelsMargin = 0;
+    int floorVoxelsMargin = 0;
     int robotVoxelsHeight = 0;
 };
 
@@ -31,7 +31,7 @@ class CudaTransform3D {
 };
 
 // initialize the Map on the host and the grids (2D and 3D) on the device
-void initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int freeVoxelsMargin, int robotVoxelsHeight);
+void initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight);
 
 // free struct (allocated on the host) and the grids (allocated on the device)
 void freeMap(Map *h_map);
@@ -57,22 +57,22 @@ void initDevicePointcloud(Point **d_pointcloud, int length);
 // initialize a pointcloud on the device (GPU) with the points of another pointcloud allocated on the host
 // the address of the pointer to the pointcloud must be passed because the allocation of the pointcloud
 // is done on the device through a kernel function
-void initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int sizePointcloud);
+void initDevicePointcloud(Point **d_pointcloud, Point *h_pointcloud, int numPoints);
 
 // free allocated space by pointcloud on the device
 void freeDevicePointcloud(Point *d_pointcloud);
 
 // generates a pointcloud with n random points
-void generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int sizePointcloud);
+void generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int numPoints);
 
 // insert the points of the pointcloud in the 3D Grid
-void insertPointcloud(Map *h_map, Point *d_pointcloud, int sizePointcloud);
+void insertPointcloud(Map *h_map, Point *d_pointcloud, int numPoints);
 
 // checks if the grid is legal
 // void checkGrid(Map *h_map);
 
 // checks if there are duplicates in the pointcloud (points with the same x,y,z coordinates)
-void checkDuplicates(Map *h_map, Point *d_pointcloud, int sizePointcloud);
+void checkDuplicates(Map *h_map, Point *d_pointcloud, int numPoints);
 
 // Converts an array of points in the format [point0_x, point0_y, point0_z, point0_w, point1_x, point1_y, point1_z, point1_w, ...]
 // in a device pointcloud
@@ -82,11 +82,8 @@ void arrayToPointcloud(float *h_pc_array, int length, Point **d_pointcloud, Cuda
 
 // ----- print functions -----
 
-// print 2D Grid
+// print host 2D Grid
 void printHostGrid2D(char *h_grid_2D, int dimx, int dimy);
-
-// print 2D Grid with int values
-void printHostGrid2D(int *h_grid_2D, int dimx, int dimy);
 
 // print host 3D Grid
 void printHostGrid3D(char *h_grid_3D, int dimx, int dimy, int dimz);
@@ -94,52 +91,46 @@ void printHostGrid3D(char *h_grid_3D, int dimx, int dimy, int dimz);
 // print device 2D Grid
 void printDeviceGrid2D(char *d_grid_2D, int dimx, int dimy);
 
+// print the device Map 2D Grid
+void printDeviceGrid2D(Map *h_map);
+
 // print device 3D Grid
 void printDeviceGrid3D(char *d_grid_3D, int dimx, int dimy, int dimz);
+
+// print device Map 3D Grid as many 2D planes
+void printDeviceGrid3D(Map *h_map);
 
 // print the 2D Grid on a line (as it really is in the memory)
 void printDeviceLinearGrid2D(char *d_grid_2D, int dimx, int dimy);
 
+// print the 2D Grid on a line (as it really is in the memory)
+void printDeviceLinearGrid2D(Map *h_map);
+
 // print device 3D Grid on a line (as it really is in the memory)
 void printDeviceLinearGrid3D(char *d_grid_3D, int dimx, int dimy, int dimz);
 
-// print Map Grids
-
-// print the 2D Grid
-void printMapGrid2D(Map *h_map);
-
-// print device 3D Grid as many 2D planes
-void printMapGrid3D(Map *h_map);
-
-// print the 2D Grid on a line (as it really is in the memory)
-void printLinearMapGrid2D(Map *h_map);
-
 // print device 3D Grid on a line (as it really is in the memory)
-void printLinearMapGrid3D(Map *h_map);
-
-// --------
+void printDeviceLinearGrid3D(Map *h_map);
 
 // print device pointcloud
-void printPointcloud(Point *d_pointcloud, int sizePointcloud);
+void printPointcloud(Point *d_pointcloud, int numPoints);
 
 // ------------------------
 
-// functions for 3D mesh generation (.obj)
 // void vertex(FILE *file, float x, float y, float z);
 // void face(FILE *file, int v1, int v2, int v3);
 // void cubeVertex(FILE *file, float res, float x, float y, float z);
 // void cubeFace(FILE *file, int nCube);
 
-// void generateMeshGrid2D(Map *h_map, const char *path);
+// functions for 3D mesh generation (.obj)
 
-void generateMesh(Map *h_map, const char *path);
-void generateSimpleMesh(Map *h_map, const char *path, bool isOccupationMesh);
-
-// ------------------------
+void generateMesh2D(Map *h_map, const char *path);
+void generateMesh3D(Map *h_map, const char *path);
+void generateSimpleMesh3D(Map *h_map, const char *path, bool isOccupationMesh);
 
 // ray tracing to find free cells
-// rays starts at origin and ends at the first encountered obstacle in its own direction
-void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int sizePointcloud, Point origin, bool freeObstacles);
+// each ray starts at origin and ends at the first encountered obstacle in its path
+void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int numPoints, Point origin, bool freeObstacles);
 
 // update occupied, free and unknown cells of the 2D grid using the data from 3D grid
 // maxUnknownConfidence is the confidence set if every voxel inside the height interval of the robot
@@ -152,7 +143,7 @@ void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int oc
 
 // returns the cv::Mat of the 2D colored grid
 cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold);
-cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition);
+cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius);
 
 }  // namespace CudaGrid3D
 

@@ -49,10 +49,12 @@ int main(int argc, char* argv[]) {
     point_ori.tra[0] = 0.0;
     point_ori.tra[1] = 0.0;
 
-    Mat res = getGrid2D(h_map, 10, 55, 85, &point_ori);
+    int markerRadius = 2;
+
+    Mat res = getGrid2D(h_map, 10, 55, 85, &point_ori, markerRadius);
     namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
     imshow("Image Test OpenCV", res);
     waitKey(0);
 
-    generateMesh(h_map, "./compl_mesh.obj");
+    generateMesh3D(h_map, "./compl_mesh.obj");
 }
