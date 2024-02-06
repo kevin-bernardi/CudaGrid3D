@@ -457,8 +457,8 @@ Here is a simple example for 3D mesh generation:
 
     // simple mesh generation
 
-    bool isOccupationMesh = true;
-    generateSimpleMesh3D(h_map, "./simple_mesh.obj", isOccupationMesh);
+    MeshType meshType = OCCUPANCY_MAP;
+    generateSimpleMesh3D(h_map, "./simple_mesh.obj", meshType);
 
     [...]
 ```

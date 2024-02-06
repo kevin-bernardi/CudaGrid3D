@@ -12,6 +12,7 @@
   - [generateMesh3D](#generatemesh3d)
   - [generateSimpleMesh3D](#generatesimplemesh3d)
   - [pointcloudRayTracing](#pointcloudraytracing)
+  - [findFrontiers3D](#findfrontiers3d)
   - [updateGrid2D](#updategrid2d)
   - [getUnknownDensityGrid2D](#getunknowndensitygrid2d)
   - [getGrid2D](#getgrid2d)
@@ -146,15 +147,15 @@ Generate a mesh of the 3D grid.
 
 ## generateSimpleMesh3D
 
-`void generateSimpleMesh(Map *h_map, const char *path, bool isOccupationMesh)`
+`void generateSimpleMesh(Map *h_map, const char *path, MeshType meshType)`
 
-Generate a simple mesh of the 3D grid (only a vertex for each occupied cell). If `isOccupationMesh` is false then a mesh of the free space is generated instead.
+Generate a simple mesh of the 3D grid. If `meshType` is set to `OCCUPANCY_MAP` a vertex is inserted in the mesh for each occupied cell. If `meshType` is set to `FREE_MAP` there will be a vertex for each free cell and if `meshType` is set to `FRONTIER_MAP` there will be a vertex for each frontier cell.
 
-| Parameter        | Description                                                                                                |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| h_map            | Map struct                                                                                                 |
-| path             | Save path of the generated mesh                                                                            |
-| isOccupationMesh | If true the function generates a mesh of the occupied space, otherwise it creates a mesh of the free space |
+| Parameter | Description                                                                           |
+| --------- | ------------------------------------------------------------------------------------- |
+| h_map     | Map struct                                                                            |
+| path      | Save path of the generated mesh                                                       |
+| meshType  | Mesh type to be created. Possible values: `OCCUPANCY_MAP`, `FREE_MAP`, `FRONTIER_MAP` |
 
 ## pointcloudRayTracing
 
@@ -169,6 +170,17 @@ Run the ray tracing algorithm to find free cells in the 3D grid.
 | numPoints     | Number of points in the pointcloud               |
 | origin        | Origin point (camera coordinates)                |
 | freeObstacles | If true the occupied cells can be marked as free |
+
+## findFrontiers3D
+
+`void findFrontiers3D(Map *h_map)`
+
+Find the frontier cells in the 3D grid. A frontier cell is a free voxel in the 3D grid with at least one unknown neighbour on the same height.
+
+| Parameter | Description |
+| --------- | ----------- |
+| h_map     | Map struct  |
+
 
 ## updateGrid2D
 

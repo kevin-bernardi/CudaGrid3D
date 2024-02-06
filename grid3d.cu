@@ -797,7 +797,7 @@ void CudaGrid3D::generateMesh3D(Map *h_map, const char *path) {
     free(h_grid);
 }
 
-void CudaGrid3D::generateSimpleMesh3D(Map *h_map, const char *path, bool isOccupationMesh) {
+void CudaGrid3D::generateSimpleMesh3D(Map *h_map, const char *path, MeshType meshType) {
     float dimX = h_map->dimX;
     float dimY = h_map->dimY;
     float dimZ = h_map->dimZ;
@@ -815,12 +815,14 @@ void CudaGrid3D::generateSimpleMesh3D(Map *h_map, const char *path, bool isOccup
 
     char checkStatus;
 
-    if (isOccupationMesh) {
+    if (meshType == OCCUPANCY_MAP) {
         // if isOccupationMesh is true build a mesh where obstacles are drawn
         checkStatus = OCCUPIED_CELL;
-    } else {
+    } else if (meshType == FREE_MAP) {
         // otherwise draw the free space
         checkStatus = FREE_CELL;
+    } else if (meshType == FRONTIER_MAP) {
+        checkStatus = FRONTIER_CELL;
     }
 
     for (int i = 0; i < numCells; i++) {
@@ -1011,6 +1013,55 @@ void CudaGrid3D::pointcloudRayTracing(Map *h_map, CudaGrid3D::Point *d_pointclou
     cudaDeviceSynchronize();
 }
 
+__global__ void findFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (tid < dimX * dimY * dimZ) {
+        if (d_grid_3D[tid] != FREE_CELL) {
+            return;
+        }
+
+        int z = tid / (dimX * dimY);
+        int x = (tid - (z * dimX * dimY)) / dimY;
+        int y = tid - (x * dimY + z * dimX * dimY);
+
+        if (x == 0 || x >= dimX - 1 || y == 0 || y == dimY - 1 || z == 0 || z == dimZ - 1) {
+            return;
+        }
+
+        // array of 1D indices of the 8 neighbours on the horizontal plane (same z) of the point ("o" in the grid below)
+        //  |o|o|o|
+        //  |o|x|o|
+        //  |o|o|o|
+        int neighbourCellsIndices[8];
+
+        neighbourCellsIndices[0] = getIdx3D(dimX, dimY, dimZ, x - 1, y - 1, z);
+        neighbourCellsIndices[1] = getIdx3D(dimX, dimY, dimZ, x, y - 1, z);
+        neighbourCellsIndices[2] = getIdx3D(dimX, dimY, dimZ, x + 1, y - 1, z);
+        neighbourCellsIndices[3] = getIdx3D(dimX, dimY, dimZ, x - 1, y, z);
+        neighbourCellsIndices[4] = getIdx3D(dimX, dimY, dimZ, x + 1, y, z);
+        neighbourCellsIndices[5] = getIdx3D(dimX, dimY, dimZ, x - 1, y + 1, z);
+        neighbourCellsIndices[6] = getIdx3D(dimX, dimY, dimZ, x, y + 1, z);
+        neighbourCellsIndices[7] = getIdx3D(dimX, dimY, dimZ, x + 1, y + 1, z);
+
+        for (int i = 0; i < 8; i++) {
+            int idx3D = neighbourCellsIndices[i];
+
+            // check if the neighbour is unknown
+            if (d_grid_3D[idx3D] == UNKNOWN_CELL) {
+                d_grid_3D[tid] = FRONTIER_CELL;
+                break;
+            }
+        }
+    }
+}
+
+void CudaGrid3D::findFrontiers3D(Map *h_map) {
+    int numPoints = h_map->dimX * h_map->dimY * h_map->dimZ;
+    int numBlocks = (numPoints + 256) / 256;
+    findFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ);
+}
+
 __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int floorVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int minOccupiedConfidence) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -1078,7 +1129,7 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
     }
 }
 
-__global__ void findFrontiersKernel(char *d_grid_2D, int dimX, int dimY, int freeThreshold, int occupiedThreshold) {
+__global__ void findFrontiers2DKernel(char *d_grid_2D, int dimX, int dimY, int freeThreshold, int occupiedThreshold) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     // exit if the cell is not free
@@ -1137,7 +1188,7 @@ void CudaGrid3D::updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfi
 
     updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, maxUnknownConfidence, minOccupiedConfidence);
 
-    findFrontiersKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->dimX, h_map->dimY, freeThreshold, minOccupiedConfidence);
+    findFrontiers2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->dimX, h_map->dimY, freeThreshold, minOccupiedConfidence);
     //  cudaDeviceSynchronize();
 }
 

@@ -33,6 +33,12 @@ class CudaTransform3D {
     double rot[3][3];
 };
 
+enum MeshType {
+    OCCUPANCY_MAP,
+    FREE_MAP,
+    FRONTIER_MAP
+};
+
 /// @brief Initialize the Map struct on the host and the grids (2D and 3D) on the device
 /// @param h_map Map struct
 /// @param dimX Number of cells on the x-axis
@@ -213,7 +219,7 @@ void generateMesh3D(Map *h_map, const char *path);
 /// @param h_map map
 /// @param path save path of the mesh
 /// @param isOccupationMesh if true generates a mesh of the occupied space, otherwise a mesh of the free space is created
-void generateSimpleMesh3D(Map *h_map, const char *path, bool isOccupationMesh);
+void generateSimpleMesh3D(Map *h_map, const char *path, MeshType meshType);
 
 /// @brief Find the free cells with a ray tracing algorithm.
 /// Each ray starts at origin and ends at the first encountered obstacle in its path
@@ -223,6 +229,10 @@ void generateSimpleMesh3D(Map *h_map, const char *path, bool isOccupationMesh);
 /// @param origin coordinates of the camera (origin point of the traced rays)
 /// @param freeObstacles mark occupied cells as free is traversed by a
 void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int numPoints, Point origin, bool freeObstacles);
+
+/// @brief Find frontier points in the 3D grid
+/// @param h_map map
+void findFrontiers3D(Map *h_map);
 
 /// @brief Update occupied, free and unknown cells of the 2D grid using the data from 3D grid
 /// @param h_map map

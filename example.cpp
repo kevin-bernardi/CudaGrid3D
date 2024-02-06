@@ -10,11 +10,11 @@ using namespace CudaGrid3D;
 int main(int argc, char* argv[]) {
     int dimX = 500;  // units
     int dimY = 500;
-    int dimZ = 500;
+    int dimZ = 100;
     float cellSize = 0.1;
     int freeVoxelsMargin = 1;
-    int robotVoxelsHeight = 5;
-    int numPoints = 10000;
+    int robotVoxelsHeight = 4;
+    int numPoints = 100000;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -42,19 +42,13 @@ int main(int argc, char* argv[]) {
     insertPointcloud(h_map, d_pointcloud, numPoints);
 
     pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori, false);
+    findFrontiers3D(h_map);
     updateGrid2D(h_map, 10, 50, 75);
 
-    CudaTransform3D point_ori;
-
-    point_ori.tra[0] = 0.0;
-    point_ori.tra[1] = 0.0;
-
-    int markerRadius = 2;
-
-    Mat res = getGrid2D(h_map, 10, 55, 85, &point_ori, markerRadius);
+    Mat res = getGrid2D(h_map, 10, 55, 85);
     namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
     imshow("Image Test OpenCV", res);
     waitKey(0);
 
-    generateMesh3D(h_map, "./compl_mesh.obj");
+    generateSimpleMesh3D(h_map, "./mesh.obj", FRONTIER_MAP);
 }
