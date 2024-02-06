@@ -1122,7 +1122,7 @@ __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, i
             // 2 voxels are occipied: set the confidence at the mid of minOccupiedConfidence
             // and maxOccupiedConfidence (100)
             d_grid_2D[tid] = minOccupiedConfidence + (100 - minOccupiedConfidence) / 2;
-        } else if (countOccupied >= 2) {
+        } else if (countOccupied > 2) {
             // more than 2 voxels are occupied, set maximum confidence (100)
             d_grid_2D[tid] = 100;
         }
