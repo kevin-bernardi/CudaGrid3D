@@ -1044,14 +1044,38 @@ __global__ void findFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, int d
         neighbourCellsIndices[6] = getIdx3D(dimX, dimY, dimZ, x, y + 1, z);
         neighbourCellsIndices[7] = getIdx3D(dimX, dimY, dimZ, x + 1, y + 1, z);
 
+        // int index = 0;
+
+        // int neighbourCellsIndices[26];
+
+        // for (int i = -1; i <= 1; i++) {
+        //     for (int j = -1; j <= 1; j++) {
+        //         for (int k = -1; k <= 1; k++) {
+        //             if (i != 0 || j != 0 || k != 0) {
+        //                 neighbourCellsIndices[index] = getIdx3D(dimX, dimY, dimZ, x + i, y + i, z + i);
+        //                 index++;
+        //             }
+        //         }
+        //     }
+        // }
+
+        int nUnknown = 0;
+        bool foundOccupied = false;
+
         for (int i = 0; i < 8; i++) {
             int idx3D = neighbourCellsIndices[i];
 
             // check if the neighbour is unknown
             if (d_grid_3D[idx3D] == UNKNOWN_CELL) {
-                d_grid_3D[tid] = FRONTIER_CELL;
+                nUnknown++;
+            } else if (d_grid_3D[idx3D] == OCCUPIED_CELL) {
+                foundOccupied = true;
                 break;
             }
+        }
+
+        if (!foundOccupied && nUnknown >= 3) {
+            d_grid_3D[tid] = FRONTIER_CELL;
         }
     }
 }
