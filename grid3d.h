@@ -5,25 +5,27 @@
 
 namespace CudaGrid3D {
 
-// Map structs that holds the 2D and the 3D Grids and grid parameters
-class Map {
-   public:
-    char *d_grid_2D;
-    char *d_grid_3D;
-    int dimX = 0;
-    int dimY = 0;
-    int dimZ = 0;
-    float cellSize = 0.0;
-    int floorVoxelsMargin = 0;
-    int robotVoxelsHeight = 0;
-};
-
 //  3D Point struct (x,y,z coordinates)
 class Point {
    public:
     double x = 0.0;
     double y = 0.0;
     double z = 0.0;
+};
+
+// Map structs that holds the 2D and the 3D Grids and grid parameters
+class Map {
+   public:
+    char *d_grid_2D;
+    char *d_grid_3D;
+    Point *d_frontiers_3D;
+    int numFrontiers_3D = 0;
+    int dimX = 0;
+    int dimY = 0;
+    int dimZ = 0;
+    float cellSize = 0.0;
+    int floorVoxelsMargin = 0;
+    int robotVoxelsHeight = 0;
 };
 
 // Struct that contains the translation vector and the rotation matrix
@@ -272,6 +274,7 @@ cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occup
 /// @return 2D occupancy map
 cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius);
 
+void clusterFrontiers3D(Map *h_map);
 }  // namespace CudaGrid3D
 
 #endif
