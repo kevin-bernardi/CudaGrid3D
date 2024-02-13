@@ -12,6 +12,13 @@ class IntPoint {
     unsigned int z = 0;
 };
 
+class DevicePoint {
+   public:
+    unsigned int *d_x;
+    unsigned int *d_y;
+    unsigned int *d_z;
+};
+
 //  3D Point struct (x,y,z coordinates)
 class Point {
    public:
@@ -234,7 +241,7 @@ void generateSimpleMesh3D(Map *h_map, const char *path, MeshType meshType);
 /// @param d_pointcloud pointcloud (device)
 /// @param numPoints number of point in the pointcloud
 /// @param origin coordinates of the camera (origin point of the traced rays)
-/// @param freeObstacles mark occupied cells as free is traversed by a
+/// @param freeObstacles mark occupied cells as free if it is traversed by a ray
 void pointcloudRayTracing(Map *h_map, Point *d_pointcloud, int numPoints, Point origin, bool freeObstacles);
 
 /// @brief Find frontier points in the 3D grid
@@ -279,7 +286,7 @@ cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occup
 /// @return 2D occupancy map
 cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius);
 
-void clusterFrontiers3D(Map *h_map);
+void clusterFrontiers3D(Map *h_map, double maxClusterRadius);
 }  // namespace CudaGrid3D
 
 #endif

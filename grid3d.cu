@@ -103,7 +103,7 @@ void CudaGrid3D::initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSiz
     cudaMalloc((void **)&d_grid_2D, numCellsGrid2D * sizeof(char));
 
     // allocate the grid3D on the device (GPU)
-    cudaMalloc((void **)&d_grid_3D, numCellsGrid3D * sizeof(bool));
+    cudaMalloc((void **)&d_grid_3D, numCellsGrid3D * sizeof(char));
 
     // // allocate the array of frontier cells on the device (GPU)
     // cudaError_t err = cudaMalloc((void **)&d_frontiers_3D, numCellsGrid3D * sizeof(IntPoint));
@@ -1407,6 +1407,8 @@ Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, i
     return getGrid2DTask(h_map, freeThreshold, warningThreshold, occupiedThreshold, true, robotPosition, markerRadius);
 }
 
+/*
+
 __global__ void initFrontierToCluster(int *arr, int length) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -1422,7 +1424,17 @@ __device__ double euclideanDistance(CudaGrid3D::IntPoint p1, CudaGrid3D::IntPoin
     return sqrt(pow(diff_x, 2) + pow(diff_y, 2) + pow(diff_z, 2));
 }
 
-__global__ void clusterFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ, CudaGrid3D::IntPoint center1, CudaGrid3D::IntPoint center2, int *d_frontierToCluster) {
+__global__ void checkPointAssignmentDifferences(char *old_frontierToCluster, char *new_frontierToCluster, int length, int *d_diff) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (tid < length && *d_diff == 0) {
+        if (old_frontierToCluster[tid] != new_frontierToCluster[tid]) {
+            atomicAdd(d_diff, 1);
+        }
+    }
+}
+
+__global__ void clusterFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ, CudaGrid3D::IntPoint center1, CudaGrid3D::IntPoint center2, int *d_frontierToCluster, int *d_numPointsTo1, int *d_numPointsTo2, unsigned int *new_center1, unsigned int *new_center2) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < dimX * dimY * dimZ) {
@@ -1445,11 +1457,36 @@ __global__ void clusterFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, in
 
             if (distance1 <= distance2) {
                 d_frontierToCluster[tid] = 1;
+                atomicAdd(d_numPointsTo1, 1);
+                atomicAdd()
+                    printf("point n. %d assigned to 1\n", tid);
             } else {
                 d_frontierToCluster[tid] = 2;
+                atomicAdd(d_numPointsTo2, 1);
+                printf("point n. %d assigned to 2\n", tid);
             }
         }
     }
+}
+
+void initDevicePoint(CudaGrid3D::DevicePoint *pt) {
+    unsigned int initVal = 0;
+
+    unsigned int *d_x;
+    unsigned int *d_y;
+    unsigned int *d_z;
+
+    cudaMalloc((void **)&d_x, sizeof(unsigned int));
+    cudaMalloc((void **)&d_y, sizeof(unsigned int));
+    cudaMalloc((void **)&d_z, sizeof(unsigned int));
+
+    cudaMemcpy(d_x, &initVal, sizeof(unsigned int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, &initVal, sizeof(unsigned int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_z, &initVal, sizeof(unsigned int), cudaMemcpyHostToDevice);
+
+    pt->d_x = d_x;
+    pt->d_y = d_y;
+    pt->d_z = d_z;
 }
 
 void CudaGrid3D::clusterFrontiers3D(Map *h_map) {
@@ -1477,8 +1514,267 @@ void CudaGrid3D::clusterFrontiers3D(Map *h_map) {
 
     cudaMalloc((void **)&d_frontierToCluster, numCells * sizeof(int));
 
+    int numPointsTo1 = 0;
+    int numPointsTo2 = 0;
+
+    int *d_numPointsTo1;
+    int *d_numPointsTo2;
+
+    cudaMalloc(&d_numPointsTo1, sizeof(int));
+    cudaMalloc(&d_numPointsTo2, sizeof(int));
+
+    cudaMemcpy(d_numPointsTo1, &numPointsTo1, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_numPointsTo2, &numPointsTo2, sizeof(int), cudaMemcpyHostToDevice);
+
     initFrontierToCluster<<<numBlocks, 256>>>(d_frontierToCluster, numCells);
 
-    clusterFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ, center1, center2, d_frontierToCluster);
+    DevicePoint *new_center1;
+    DevicePoint *new_center2;
+
+    initDevicePoint(new_center1);
+    initDevicePoint(new_center2);
+
+    clusterFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ, center1, center2, d_frontierToCluster, d_numPointsTo1, d_numPointsTo2, new_center1, new_center2);
     cudaDeviceSynchronize();
+
+    cudaMemcpy(&numPointsTo1, d_numPointsTo1, sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&numPointsTo2, d_numPointsTo2, sizeof(int), cudaMemcpyDeviceToHost);
+
+    printf("cluster 1: %d points\ncluster 2: %d points\n", numPointsTo1, numPointsTo2);
+}
+
+*/
+
+double distance(CudaGrid3D::Point *p1, CudaGrid3D::Point *p2) {
+    int diff_x = p1->x - p2->x;
+    int diff_y = p1->y - p2->y;
+    int diff_z = p1->z - p2->z;
+    return sqrt(pow(diff_x, 2) + pow(diff_y, 2) + pow(diff_z, 2));
+}
+
+void scanFrontiers(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *frontiers, int *numFrontiers) {
+    int dimX = h_map->dimX;
+    int dimY = h_map->dimY;
+    int dimZ = h_map->dimZ;
+    int numCells = dimX * dimY * dimZ;
+
+    char *h_grid_3D = (char *)malloc(numCells * sizeof(char));
+
+    cudaMemcpy(h_grid_3D, h_map->d_grid_3D, numCells * sizeof(char), cudaMemcpyDeviceToHost);
+
+    for (int i = 0; i < numCells; i++) {
+        if (h_grid_3D[i] == FRONTIER_CELL) {
+            int z = i / (dimX * dimY);
+            int x = (i - (z * dimX * dimY)) / dimY;
+            int y = i - (x * dimY + z * dimX * dimY);
+
+            CudaGrid3D::IntPoint pt;
+            pt.x = x;
+            pt.y = y;
+            pt.z = z;
+
+            // printf("found frontier %d (%d, %d, %d)\n", i, x, y, z);
+
+            frontiers[*numFrontiers] = pt;
+            (*numFrontiers)++;
+        }
+    }
+
+    free(h_grid_3D);
+}
+
+void printFrontiers(CudaGrid3D::IntPoint *frontiers, int numFrontiers) {
+    for (int i = 0; i < numFrontiers; i++) {
+        printf("Frontier %d (%d, %d, %d)\n", i, frontiers[i].x, frontiers[i].y, frontiers[i].z);
+    }
+}
+
+void divideFrontiers(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *frontiers, int numFrontiers, double maxClusterRadius, CudaGrid3D::Point *candidatePoints, int *pointsPerCluster, int *idxCluster) {
+    srand(time(NULL));
+
+    int idxCentroid1 = rand() % numFrontiers;
+    int idxCentroid2 = rand() % numFrontiers;
+
+    CudaGrid3D::Point centroid1;
+    centroid1.x = frontiers[idxCentroid1].x;
+    centroid1.y = frontiers[idxCentroid1].y;
+    centroid1.z = frontiers[idxCentroid1].z;
+
+    // centroid1.x = rand() % h_map->dimX;
+    // centroid1.y = rand() % h_map->dimY;
+    // centroid1.z = rand() % h_map->dimZ;
+
+    CudaGrid3D::Point centroid2;
+
+    centroid2.x = frontiers[idxCentroid2].x;
+    centroid2.y = frontiers[idxCentroid2].y;
+    centroid2.z = frontiers[idxCentroid2].z;
+
+    // centroid2.x = rand() % h_map->dimX;
+    // centroid2.y = rand() % h_map->dimY;
+    // centroid2.z = rand() % h_map->dimZ;
+
+    printf("centroid 1: (%f, %f, %f)\n", centroid1.x, centroid1.y, centroid1.z);
+    printf("centroid 2: (%f, %f, %f)\n", centroid2.x, centroid2.y, centroid2.z);
+
+    int *frontierToCluster = (int *)malloc(sizeof(int) * numFrontiers);
+
+    if (frontierToCluster == NULL) {
+        printf("Memory not allocated.\n");
+    }
+
+    bool isChanged = true;
+
+    int numPointsTo1;
+    int numPointsTo2;
+
+    double maxDistanceCluster1;
+    double maxDistanceCluster2;
+
+    while (isChanged) {
+        isChanged = false;
+
+        numPointsTo1 = 0;
+        numPointsTo2 = 0;
+
+        maxDistanceCluster1 = 0.0;
+        maxDistanceCluster2 = 0.0;
+
+        CudaGrid3D::Point newCentroid1;
+        newCentroid1.x = 0.0;
+        newCentroid1.y = 0.0;
+        newCentroid1.z = 0.0;
+
+        CudaGrid3D::Point newCentroid2;
+        newCentroid2.x = 0.0;
+        newCentroid2.y = 0.0;
+        newCentroid2.z = 0.0;
+
+        for (int i = 0; i < numFrontiers; i++) {
+            CudaGrid3D::IntPoint pt = frontiers[i];
+            CudaGrid3D::Point p;
+            p.x = pt.x;
+            p.y = pt.y;
+            p.z = pt.z;
+
+            double dist1 = distance(&p, &centroid1);
+            double dist2 = distance(&p, &centroid2);
+
+            // printf("point %d distances: %.3f %.3f\n", i, dist1, dist2);
+
+            if (dist1 < dist2) {
+                if (frontierToCluster[i] != 1) {
+                    isChanged = true;
+                    frontierToCluster[i] = 1;
+                }
+                newCentroid1.x += p.x;
+                newCentroid1.y += p.y;
+                newCentroid1.z += p.z;
+                numPointsTo1++;
+
+                if (dist1 > maxDistanceCluster1) {
+                    maxDistanceCluster1 = dist1;
+                }
+                // printf("point %d assigned to centroid 1\n", i);
+            } else {
+                if (frontierToCluster[i] != 2) {
+                    isChanged = true;
+                    frontierToCluster[i] = 2;
+                }
+                newCentroid2.x += p.x;
+                newCentroid2.y += p.y;
+                newCentroid2.z += p.z;
+                numPointsTo2++;
+
+                if (dist2 > maxDistanceCluster2) {
+                    maxDistanceCluster2 = dist2;
+                }
+                // printf("point %d assigned to centroid 2\n", i);
+            }
+        }
+
+        printf("points distribution: %d %d\n", numPointsTo1, numPointsTo2);
+
+        centroid1.x = newCentroid1.x / (double)numPointsTo1;
+        centroid1.y = newCentroid1.y / (double)numPointsTo1;
+        centroid1.z = newCentroid1.z / (double)numPointsTo1;
+
+        printf("new centroid 1: (%f, %f, %f)\n", centroid1.x, centroid1.y, centroid1.z);
+
+        centroid2.x = newCentroid2.x / (double)numPointsTo2;
+        centroid2.y = newCentroid2.y / (double)numPointsTo2;
+        centroid2.z = newCentroid2.z / (double)numPointsTo2;
+
+        printf("new centroid 2: (%f, %f, %f)\n", centroid2.x, centroid2.y, centroid2.z);
+    }
+    printf("\n=========================================\n");
+    printf("max distances: %.3f %.3f\n", maxDistanceCluster1, maxDistanceCluster2);
+    printf("\n=========================================\n");
+
+    if (maxDistanceCluster1 > maxClusterRadius) {
+        CudaGrid3D::IntPoint *pointsCluster1 = (CudaGrid3D::IntPoint *)malloc(numPointsTo1 * sizeof(CudaGrid3D::IntPoint));
+
+        int idx = 0;
+        for (int i = 0; i < numFrontiers; i++) {
+            if (frontierToCluster[i] == 1) {
+                pointsCluster1[idx] = frontiers[i];
+                idx++;
+            }
+        }
+        divideFrontiers(h_map, pointsCluster1, numPointsTo1, maxClusterRadius, candidatePoints, pointsPerCluster, idxCluster);
+    } else {
+        candidatePoints[*idxCluster] = centroid1;
+        pointsPerCluster[*idxCluster] = numPointsTo1;
+        (*idxCluster)++;
+    }
+
+    if (maxDistanceCluster2 > maxClusterRadius) {
+        CudaGrid3D::IntPoint *pointsCluster2 = (CudaGrid3D::IntPoint *)malloc(numPointsTo2 * sizeof(CudaGrid3D::IntPoint));
+
+        int idx = 0;
+        for (int i = 0; i < numFrontiers; i++) {
+            if (frontierToCluster[i] == 2) {
+                pointsCluster2[idx] = frontiers[i];
+                idx++;
+            }
+        }
+        divideFrontiers(h_map, pointsCluster2, numPointsTo2, maxClusterRadius, candidatePoints, pointsPerCluster, idxCluster);
+    } else {
+        candidatePoints[*idxCluster] = centroid2;
+        pointsPerCluster[*idxCluster] = numPointsTo2;
+        (*idxCluster)++;
+    }
+}
+
+void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRadius) {
+    int numCells = h_map->dimX * h_map->dimY * h_map->dimZ;
+
+    IntPoint *frontiers = (IntPoint *)malloc(numCells * sizeof(IntPoint));
+    int numFrontiers = 0;
+
+    scanFrontiers(h_map, frontiers, &numFrontiers);
+
+    printf("num frontiers: %d\n", numFrontiers);
+    // printFrontiers(frontiers, numFrontiers);
+
+    Point *candidatePoints = (Point *)malloc(numFrontiers * sizeof(Point));
+    int *pointsPerCluster = (int *)malloc(numFrontiers * sizeof(int));
+    int idxCluster = 0;
+
+    divideFrontiers(h_map, frontiers, numFrontiers, maxClusterRadius, candidatePoints, pointsPerCluster, &idxCluster);
+
+    printf("num cluster: %d\n", idxCluster);
+
+    int maxPointsPerCluster = 0;
+    int idxBiggestCluster = 0;
+
+    for (int i = 0; i < idxCluster; i++) {
+        if (pointsPerCluster[i] > maxPointsPerCluster) {
+            maxPointsPerCluster = pointsPerCluster[i];
+            idxBiggestCluster = i;
+        }
+    }
+
+    printf("best candidate point %d: (%f, %f, %f)\n", idxBiggestCluster, candidatePoints[idxBiggestCluster].x, candidatePoints[idxBiggestCluster].y, candidatePoints[idxBiggestCluster].z);
+    printf("points in cluster %d: %d\n\n\n", idxBiggestCluster, maxPointsPerCluster);
 }

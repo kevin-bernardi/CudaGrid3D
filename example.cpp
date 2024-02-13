@@ -8,13 +8,13 @@ using namespace cv;
 using namespace CudaGrid3D;
 
 int main(int argc, char* argv[]) {
-    int dimX = 5;  // units
-    int dimY = 5;
-    int dimZ = 10;
+    int dimX = 100;  // units
+    int dimY = 100;
+    int dimZ = 100;
     float cellSize = 0.1;
     int freeVoxelsMargin = 1;
     int robotVoxelsHeight = 2;
-    int numPoints = 20;
+    int numPoints = 1000;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -45,15 +45,15 @@ int main(int argc, char* argv[]) {
     findFrontiers3D(h_map);
     updateGrid2D(h_map, 10, 50, 75);
 
-    // Mat res = getGrid2D(h_map, 10, 55, 85);
-    // namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
-    // imshow("Image Test OpenCV", res);
-    // waitKey(0);
+    generateSimpleMesh3D(h_map, "./mesh.obj", FRONTIER_MAP);
+    printDeviceGrid3D(h_map);
 
-    // generateSimpleMesh3D(h_map, "./mesh.obj", FRONTIER_MAP);
-    // printDeviceGrid3D(h_map);
+    clusterFrontiers3D(h_map, 20);
 
-    clusterFrontiers3D(h_map);
+    Mat res = getGrid2D(h_map, 10, 55, 85);
+    namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
+    imshow("Image Test OpenCV", res);
+    waitKey(0);
 
     freeMap(h_map);
 }
