@@ -67,7 +67,7 @@ __global__ void initMapKernel(char *d_grid_2D, char *d_grid_3D, int numCellsGrid
 
 // initialize 3d grid, make every cell false
 void CudaGrid3D::initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight) {
-    h_map->numFrontiers_3D = 0;
+    // h_map->numFrontiers_3D = 0;
     h_map->dimX = dimX;
     h_map->dimY = dimY;
     h_map->dimZ = dimZ;
@@ -97,20 +97,26 @@ void CudaGrid3D::initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSiz
     char *d_grid_3D;
 
     // array of frontier cells on the device (GPU)
-    Point *d_frontiers_3D;
+    // IntPoint *d_frontiers_3D;
 
     // allocate the grid2D on the device (GPU)
     cudaMalloc((void **)&d_grid_2D, numCellsGrid2D * sizeof(char));
 
     // allocate the grid3D on the device (GPU)
-    cudaMalloc((void **)&d_grid_3D, numCellsGrid3D * sizeof(char));
+    cudaMalloc((void **)&d_grid_3D, numCellsGrid3D * sizeof(bool));
 
-    // allocate the array of frontier cells on the device (GPU)
-    cudaMalloc((void **)&d_frontiers_3D, numCellsGrid2D * sizeof(Point));
+    // // allocate the array of frontier cells on the device (GPU)
+    // cudaError_t err = cudaMalloc((void **)&d_frontiers_3D, numCellsGrid3D * sizeof(IntPoint));
+
+    // if (err != cudaSuccess) {
+    //     printf("ERROR MALLOC\n");
+    // } else if (err == cudaSuccess) {
+    //     printf("SUCCESS MALLOC\n");
+    // }
 
     h_map->d_grid_2D = d_grid_2D;
     h_map->d_grid_3D = d_grid_3D;
-    h_map->d_frontiers_3D = d_frontiers_3D;
+    // h_map->d_frontiers_3D = d_frontiers_3D;
 
     initMapKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, numCellsGrid2D, numCellsGrid3D);
     cudaDeviceSynchronize();
@@ -118,7 +124,9 @@ void CudaGrid3D::initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSiz
 
 // free map space
 void CudaGrid3D::freeMap(Map *h_map) {
+    cudaFree(h_map->d_grid_2D);
     cudaFree(h_map->d_grid_3D);
+    // cudaFree(h_map->d_frontiers_3D);
     free(h_map);
 }
 
@@ -1021,7 +1029,7 @@ void CudaGrid3D::pointcloudRayTracing(Map *h_map, CudaGrid3D::Point *d_pointclou
     cudaDeviceSynchronize();
 }
 
-__global__ void findFrontiers3DKernel(char *d_grid_3D, CudaGrid3D::Point *d_frontiers_3D, int dimX, int dimY, int dimZ, int *d_numFrontiers_3D) {
+__global__ void findFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < dimX * dimY * dimZ) {
@@ -1087,13 +1095,6 @@ __global__ void findFrontiers3DKernel(char *d_grid_3D, CudaGrid3D::Point *d_fron
 
         if (!foundOccupied && nUnknown >= 3) {
             d_grid_3D[tid] = FRONTIER_CELL;
-            CudaGrid3D::Point pt;
-            pt.x = x;
-            pt.y = y;
-            pt.z = z;
-
-            // d_frontiers_3D[*d_numFrontiers_3D] = pt;
-            atomicAdd(d_numFrontiers_3D, 1);
         }
     }
 }
@@ -1101,15 +1102,8 @@ __global__ void findFrontiers3DKernel(char *d_grid_3D, CudaGrid3D::Point *d_fron
 void CudaGrid3D::findFrontiers3D(Map *h_map) {
     int numPoints = h_map->dimX * h_map->dimY * h_map->dimZ;
     int numBlocks = (numPoints + 256) / 256;
-    h_map->numFrontiers_3D = 0;
-
-    int *d_numFrontiers_3D;
-    cudaMalloc(&d_numFrontiers_3D, sizeof(int));
-    cudaMemcpy(d_numFrontiers_3D, &h_map->numFrontiers_3D, sizeof(int), cudaMemcpyHostToDevice);
-    findFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->d_frontiers_3D, h_map->dimX, h_map->dimY, h_map->dimZ, d_numFrontiers_3D);
+    findFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ);
     cudaDeviceSynchronize();
-    cudaMemcpy(&h_map->numFrontiers_3D, d_numFrontiers_3D, sizeof(int), cudaMemcpyDeviceToHost);
-    cudaFree(d_numFrontiers_3D);
 }
 
 __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int floorVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int minOccupiedConfidence) {
@@ -1413,10 +1407,48 @@ Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, i
     return getGrid2DTask(h_map, freeThreshold, warningThreshold, occupiedThreshold, true, robotPosition, markerRadius);
 }
 
-__global__ void clusterFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ) {
+__global__ void initFrontierToCluster(int *arr, int length) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (tid < length) {
+        arr[tid] = -1;
+    }
+}
+
+__device__ double euclideanDistance(CudaGrid3D::IntPoint p1, CudaGrid3D::IntPoint p2) {
+    int diff_x = p1.x - p2.x;
+    int diff_y = p1.y - p2.y;
+    int diff_z = p1.z - p2.z;
+    return sqrt(pow(diff_x, 2) + pow(diff_y, 2) + pow(diff_z, 2));
+}
+
+__global__ void clusterFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ, CudaGrid3D::IntPoint center1, CudaGrid3D::IntPoint center2, int *d_frontierToCluster) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < dimX * dimY * dimZ) {
+        if (d_grid_3D[tid] == FRONTIER_CELL) {
+            int z = tid / (dimX * dimY);
+            int x = (tid - (z * dimX * dimY)) / dimY;
+            int y = tid - (x * dimY + z * dimX * dimY);
+
+            printf("frontier idx %d (%d, %d, %d)\n", tid, x, y, z);
+
+            CudaGrid3D::IntPoint pt;
+            pt.x = x;
+            pt.y = y;
+            pt.z = z;
+
+            double distance1 = euclideanDistance(pt, center1);
+            double distance2 = euclideanDistance(pt, center2);
+
+            printf("point n. %d, distance1: %f, distance2: %f\n", tid, distance1, distance2);
+
+            if (distance1 <= distance2) {
+                d_frontierToCluster[tid] = 1;
+            } else {
+                d_frontierToCluster[tid] = 2;
+            }
+        }
     }
 }
 
@@ -1426,17 +1458,27 @@ void CudaGrid3D::clusterFrontiers3D(Map *h_map) {
 
     srand(time(NULL));
 
-    Point center1;
+    IntPoint center1;
 
     center1.x = rand() % h_map->dimX;
     center1.y = rand() % h_map->dimY;
     center1.z = rand() % h_map->dimZ;
 
-    Point center2;
+    IntPoint center2;
 
     center2.x = rand() % h_map->dimX;
     center2.y = rand() % h_map->dimY;
     center2.z = rand() % h_map->dimZ;
 
-    clusterFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ);
+    printf("centroid 1: (%d, %d, %d)\n", center1.x, center1.y, center1.z);
+    printf("centroid 2: (%d, %d, %d)\n", center2.x, center2.y, center2.z);
+
+    int *d_frontierToCluster;
+
+    cudaMalloc((void **)&d_frontierToCluster, numCells * sizeof(int));
+
+    initFrontierToCluster<<<numBlocks, 256>>>(d_frontierToCluster, numCells);
+
+    clusterFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ, center1, center2, d_frontierToCluster);
+    cudaDeviceSynchronize();
 }

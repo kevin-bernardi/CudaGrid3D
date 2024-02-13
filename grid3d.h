@@ -5,6 +5,13 @@
 
 namespace CudaGrid3D {
 
+class IntPoint {
+   public:
+    unsigned int x = 0;
+    unsigned int y = 0;
+    unsigned int z = 0;
+};
+
 //  3D Point struct (x,y,z coordinates)
 class Point {
    public:
@@ -18,8 +25,6 @@ class Map {
    public:
     char *d_grid_2D;
     char *d_grid_3D;
-    Point *d_frontiers_3D;
-    int numFrontiers_3D = 0;
     int dimX = 0;
     int dimY = 0;
     int dimZ = 0;

@@ -8,13 +8,13 @@ using namespace cv;
 using namespace CudaGrid3D;
 
 int main(int argc, char* argv[]) {
-    int dimX = 1000;  // units
-    int dimY = 1000;
-    int dimZ = 1000;
+    int dimX = 5;  // units
+    int dimY = 5;
+    int dimZ = 10;
     float cellSize = 0.1;
     int freeVoxelsMargin = 1;
     int robotVoxelsHeight = 2;
-    int numPoints = 10000;
+    int numPoints = 20;
 
     if (argc >= 8) {
         dimX = std::stoi(argv[1]);
@@ -53,5 +53,7 @@ int main(int argc, char* argv[]) {
     // generateSimpleMesh3D(h_map, "./mesh.obj", FRONTIER_MAP);
     // printDeviceGrid3D(h_map);
 
-    std::cout << "Num frontiers: " << h_map->numFrontiers_3D << std::endl;
+    clusterFrontiers3D(h_map);
+
+    freeMap(h_map);
 }
