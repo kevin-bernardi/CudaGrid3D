@@ -36,8 +36,8 @@ class Map {
     int dimY = 0;
     int dimZ = 0;
     float cellSize = 0.0;
-    int floorVoxelsMargin = 0;
-    int robotVoxelsHeight = 0;
+    int floorMargin = 0;
+    int robotHeight = 0;
 };
 
 // Struct that contains the translation vector and the rotation matrix
@@ -55,13 +55,13 @@ enum MeshType {
 
 /// @brief Initialize the Map struct on the host and the grids (2D and 3D) on the device
 /// @param h_map Map struct
-/// @param dimX Number of cells on the x-axis
-/// @param dimY Number of cells on the y-axis
-/// @param dimZ Number of cells on the z-axis
-/// @param cellSize Voxel edge length in meters
-/// @param floorVoxelsMargin Bottom margin for 2D projection of the 3D Grid
-/// @param robotVoxelsHeight Top margin for 2D projection of the 3D Grid
-void initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight);
+/// @param dimX Length of the x-axis of the grid (meters)
+/// @param dimY Length of the y-axis of the grid (meters)
+/// @param dimZ Length of the z-axis of the grid (meters)
+/// @param cellSize Voxel edge length (meters)
+/// @param floorMargin Bottom margin for 2D projection of the 3D Grid (meters)
+/// @param robotHeight Top margin for 2D projection of the 3D Grid (meters)
+void initMap(Map *h_map, float dimX, float dimY, float dimZ, float cellSize, float floorMargin, float robotHeight);
 
 /// @brief Free struct (allocated on the host) and the grids (allocated on the device)
 /// @param h_map Map struct to be freed
@@ -286,7 +286,7 @@ cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occup
 /// @return 2D occupancy map
 cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius);
 
-void clusterFrontiers3D(Map *h_map, double maxClusterRadius);
+void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin);
 }  // namespace CudaGrid3D
 
 #endif
