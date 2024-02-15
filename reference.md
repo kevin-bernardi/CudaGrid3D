@@ -20,19 +20,19 @@
 
 ## initMap
 
-`void initMap(Map *h_map, int dimX, int dimY, int dimZ, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight)`
+`void initMap(Map *h_map, float dimX, float dimY, float dimZ, float cellSize, float floorVoxelsMargin, float robotVoxelsHeight)`
 
 Initialize the Map on the host and the grids (both 2D and 3D) on the device.
 
-| Parameter         | Description                                                                          |
-| ----------------- | ------------------------------------------------------------------------------------ |
-| h_map             | Map struct                                                                           |
-| dimX              | Number of cells on the x-axis                                                        |
-| dimY              | Number of cells on the y-axis                                                        |
-| dimZ              | Number of cells on the z-axis                                                        |
-| cellSize          | Edge length of each cell in meters                                                   |
-| floorVoxelsMargin | Number of cells from the ground to not consider in 2D grid updates using the 3D grid |
-| robotVoxelsHeight | Height of the robot as number of cells                                               |
+| Parameter   | Description                                              |
+| ----------- | -------------------------------------------------------- |
+| h_map       | Map struct                                               |
+| dimX        | Length of the x-axis of the grid (meters)                |
+| dimY        | Length of the y-axis of the grid (meters)                |
+| dimZ        | Length of the z-axis of the grid (meters)                |
+| cellSize    | Edge length of each cell (meters)                        |
+| floorMargin | Floor margin to not consider in 2D grid updates (meters) |
+| robotHeight | Height of the robot (meters)                             |
 
 ## freeMap
 

@@ -1749,32 +1749,6 @@ void kMeansDivisiveClustering(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *fron
     }
 }
 
-void swap(double *xp, double *yp) {
-    double temp = *xp;
-    *xp = *yp;
-    *yp = temp;
-}
-
-// Function to perform Selection Sort
-void selectionSort(double *arr, int n) {
-    int i, j, min_idx;
-
-    // One by one move boundary of
-    // unsorted subarray
-    for (i = 0; i < n - 1; i++) {
-        // Find the minimum element in
-        // unsorted array
-        min_idx = i;
-        for (j = i + 1; j < n; j++)
-            if (arr[j] > arr[min_idx])
-                min_idx = j;
-
-        // Swap the found minimum element
-        // with the first element
-        swap(&arr[min_idx], &arr[i]);
-    }
-}
-
 void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin) {
     srand(time(NULL));
     int numCells = h_map->dimX * h_map->dimY * h_map->dimZ;
@@ -1798,7 +1772,9 @@ void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRad
 
     printf("num cluster: %d\n", idxCluster);
 
-    double *clusterGain = (double *)malloc(idxCluster * sizeof(double));
+    // double *clusterGain = (double *)malloc(idxCluster * sizeof(double));
+    int idxBestCluster = 0;
+    double gainBestCluster = 0;
 
     for (int i = 0; i < idxCluster; i++) {
         CudaGrid3D::Point candidatePointInMeters;
@@ -1809,16 +1785,17 @@ void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRad
 
         double robotCentroidDistance = distance(&origin, &candidatePointInMeters);
         double gain = pointsPerCluster[i] / pow(robotCentroidDistance, 2);
-        clusterGain[i] = gain;
-        // printf("candidate point in meters: %.3f, %.3f, %.3f\n", candidatePointInMeters.x, candidatePointInMeters.y, candidatePointInMeters.z);
-        // printf("gain %.3f, points %d, distance %.3f\n", clusterGain[i], pointsPerCluster[i], robotCentroidDistance);
+        // clusterGain[i] = gain;
+        printf("candidate point in meters: %.3f, %.3f, %.3f\n", candidatePointInMeters.x, candidatePointInMeters.y, candidatePointInMeters.z);
+        printf("gain %.3f, points %d, distance %.3f\n", gain, pointsPerCluster[i], robotCentroidDistance);
+
+        if (gain > gainBestCluster) {
+            idxBestCluster = i;
+            gainBestCluster = gain;
+        }
     }
 
-    selectionSort(clusterGain, idxCluster);
-
-    for (int i = 0; i < 5; i++) {
-        printf("best candidate point %d: (%.3fm, %.3fm, %.3fm)\n", i, candidatePoints[i].x, candidatePoints[i].y, candidatePoints[i].z);
-        printf("points in cluster %d: %d\n", i, pointsPerCluster[i]);
-        printf("gain of cluster %d: %.3f\n\n", i, clusterGain[i]);
-    }
+    printf("\nbest candidate point %d: (%.3fm, %.3fm, %.3fm)\n", idxBestCluster, candidatePoints[idxBestCluster].x, candidatePoints[idxBestCluster].y, candidatePoints[idxBestCluster].z);
+    printf("points in cluster %d: %d\n", idxBestCluster, pointsPerCluster[idxBestCluster]);
+    printf("gain of cluster %d: %.3f\n\n", idxBestCluster, gainBestCluster);
 }

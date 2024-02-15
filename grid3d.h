@@ -12,13 +12,6 @@ class IntPoint {
     unsigned int z = 0;
 };
 
-class DevicePoint {
-   public:
-    unsigned int *d_x;
-    unsigned int *d_y;
-    unsigned int *d_z;
-};
-
 //  3D Point struct (x,y,z coordinates)
 class Point {
    public:
