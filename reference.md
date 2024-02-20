@@ -16,6 +16,8 @@
   - [updateGrid2D](#updategrid2d)
   - [getUnknownDensityGrid2D](#getunknowndensitygrid2d)
   - [getGrid2D](#getgrid2d)
+  - [clusterFrontiers3D](#clusterfrontiers3d)
+  - [inflateObstacles2D](#inflateobstacles2d)
 
 
 ## initMap
@@ -237,6 +239,36 @@ Get a displayable 2D occupancy grid with an indicator of the robot position
 | occupiedThreshold | Min confidence for an occupied pixel      |
 | robotPosition     | Position of the robot (x,y,z coordinates) |
 | markerRadius      | Radius of the robot position marker       |
+
+## clusterFrontiers3D
+
+`void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::Point *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster)`
+
+Cluster the frontier cells of the 3D Grid using a combination of k-means (with k=2) and hierarchical divisive clustering
+
+| Parameter              | Description                                                                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| h_map                  | Map struct                                                                                                                       |
+| maxClusterRadiusMeters | Maximum distance of a point from its centroid in a cluster. If the distance is bigger the cluster is splitted in 2 sub clusters. |
+| origin                 | Inflation margin                                                                                                                 |
+| bestCentroid           | Centroid of the best cluster (result)                                                                                            |
+| cluster                | List of points in the best cluster (result)                                                                                      |
+| sizeCluster            | Number of points in the best cluster (result)                                                                                    |
+
+## inflateObstacles2D
+
+`void inflateObstacles2D(Map *h_map, double radius, double margin, int freeThreshold, int warningThreshold, int occupiedThreshold)`
+
+Inflate the obstacles in the 2D occupancy map
+
+| Parameter         | Description                         |
+| ----------------- | ----------------------------------- |
+| h_map             | Map struct                          |
+| radius            | Inflation radius                    |
+| margin            | Inflation margin                    |
+| freeThreshold     | Max confidence for a free cell      |
+| warningThreshold  | Min confidence for a warning cell   |
+| occupiedThreshold | Min confidence for an occupied cell |
 
 
 

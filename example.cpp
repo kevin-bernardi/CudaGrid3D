@@ -8,13 +8,13 @@ using namespace cv;
 using namespace CudaGrid3D;
 
 int main(int argc, char* argv[]) {
-    float dimX = 5;  // meters
-    float dimY = 5;
-    float dimZ = 5;
+    float dimX = 50;  // meters
+    float dimY = 50;  // meters
+    float dimZ = 10;  // meters
     float cellSize = 0.1;
-    float floorMargin = 1;
-    float robotHeight = 2;
-    int numPoints = 300;
+    float floorMargin = 0.2;
+    float robotHeight = 0.4;
+    int numPoints = 10000;
 
     if (argc == 8) {
         dimX = std::stoi(argv[1]);
@@ -54,9 +54,9 @@ int main(int argc, char* argv[]) {
     IntPoint* cluster;
     int sizeCluster;
 
-    clusterFrontiers3D(h_map, 1, ori, &centroid, &cluster, &sizeCluster);
+    // clusterFrontiers3D(h_map, 1, ori, &centroid, &cluster, &sizeCluster);
 
-    std::cout << "print in example" << std::endl;
+    // std::cout << "print in example" << std::endl;
 
     // for (int i = 0; i < 10; i++) {
     //     std::cout << "pt " << cluster[i].x << " " << cluster[i].y << " " << cluster[i].z << std::endl;
@@ -65,10 +65,16 @@ int main(int argc, char* argv[]) {
     // std::cout << "size cluster: " << sizeCluster << std::endl;
     // std::cout << "centroid: " << centroid.x << " " << centroid.y << " " << centroid.z << std::endl;
 
-    // Mat res = getGrid2D(h_map, 10, 55, 85);
-    // namedWindow("Image Test OpenCV", WINDOW_AUTOSIZE);
-    // imshow("Image Test OpenCV", res);
-    // waitKey(0);
+    Mat res = getGrid2D(h_map, 10, 55, 85);
+    namedWindow("2D Map", WINDOW_AUTOSIZE);
+    imshow("2D Map", res);
+
+    inflateObstacles2D(h_map, 0.11, 0.11, 10, 55, 85);
+
+    Mat res2 = getGrid2D(h_map, 10, 55, 85);
+    namedWindow("Inflated 2D Map", WINDOW_AUTOSIZE);
+    imshow("Inflated 2D Map", res2);
+    waitKey(0);
 
     freeMap(h_map);
 }

@@ -280,6 +280,9 @@ cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occup
 cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius);
 
 void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::Point *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster);
+
+void inflateObstacles2D(Map *h_map, double radius, double margin, int freeThreshold, int warningThreshold, int occupiedThreshold);
+
 }  // namespace CudaGrid3D
 
 #endif
