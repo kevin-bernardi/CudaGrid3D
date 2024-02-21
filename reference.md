@@ -257,7 +257,7 @@ Cluster the frontier cells of the 3D Grid using a combination of k-means (with k
 
 ## inflateObstacles2D
 
-`void inflateObstacles2D(Map *h_map, double radius, double margin, int freeThreshold, int warningThreshold, int occupiedThreshold)`
+`void inflateObstacles2D(Map *h_map, double radius, int freeThreshold, int warningThreshold, int occupiedThreshold)`
 
 Inflate the obstacles in the 2D occupancy map
 
@@ -265,7 +265,6 @@ Inflate the obstacles in the 2D occupancy map
 | ----------------- | ----------------------------------- |
 | h_map             | Map struct                          |
 | radius            | Inflation radius                    |
-| margin            | Inflation margin                    |
 | freeThreshold     | Max confidence for a free cell      |
 | warningThreshold  | Min confidence for a warning cell   |
 | occupiedThreshold | Min confidence for an occupied cell |

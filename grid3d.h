@@ -287,16 +287,17 @@ cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occup
 /// @param bestCentroid centroid of the best cluster (result)
 /// @param cluster list of points in the best cluster (result)
 /// @param sizeCluster number of points in the best cluster (result)
-void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::Point *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster);
+void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::IntPoint *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster);
 
 /// @brief Inflate the obstacles in the occupancy map
 /// @param h_map map
 /// @param radius inflation radius
-/// @param margin inflation margin
 /// @param freeThreshold max confidence for a free cell
 /// @param warningThreshold min confidence for a warning cell
 /// @param occupiedThreshold min confidence for an occupied cell
-void inflateObstacles2D(Map *h_map, double radius, double margin, int freeThreshold, int warningThreshold, int occupiedThreshold);
+void inflateObstacles2D(Map *h_map, double radius, int freeThreshold, int warningThreshold, int occupiedThreshold);
+
+void bestObservationPoint2D(Map *h_map, CudaGrid3D::IntPoint bestCentroid, CudaGrid3D::IntPoint *cluster, int sizeCluster, double distance, double degrees, int freeThreshold);
 
 }  // namespace CudaGrid3D
 

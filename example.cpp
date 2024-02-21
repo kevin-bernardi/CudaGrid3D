@@ -8,13 +8,13 @@ using namespace cv;
 using namespace CudaGrid3D;
 
 int main(int argc, char* argv[]) {
-    float dimX = 50;  // meters
-    float dimY = 50;  // meters
-    float dimZ = 10;  // meters
+    float dimX = 1;  // meters
+    float dimY = 1;  // meters
+    float dimZ = 1;  // meters
     float cellSize = 0.1;
     float floorMargin = 0.2;
     float robotHeight = 0.4;
-    int numPoints = 10000;
+    int numPoints = 10;
 
     if (argc == 8) {
         dimX = std::stoi(argv[1]);
@@ -50,31 +50,33 @@ int main(int argc, char* argv[]) {
 
     generateSimpleMesh3D(h_map, "./mesh.obj", FRONTIER_MAP);
 
-    CudaGrid3D::Point centroid;
+    CudaGrid3D::IntPoint centroid;
     IntPoint* cluster;
     int sizeCluster;
 
-    // clusterFrontiers3D(h_map, 1, ori, &centroid, &cluster, &sizeCluster);
+    clusterFrontiers3D(h_map, 1, ori, &centroid, &cluster, &sizeCluster);
 
     // std::cout << "print in example" << std::endl;
 
-    // for (int i = 0; i < 10; i++) {
-    //     std::cout << "pt " << cluster[i].x << " " << cluster[i].y << " " << cluster[i].z << std::endl;
-    // }
+    for (int i = 0; i < 10; i++) {
+        std::cout << "pt " << cluster[i].x << " " << cluster[i].y << " " << cluster[i].z << std::endl;
+    }
 
-    // std::cout << "size cluster: " << sizeCluster << std::endl;
-    // std::cout << "centroid: " << centroid.x << " " << centroid.y << " " << centroid.z << std::endl;
+    std::cout << "size cluster: " << sizeCluster << std::endl;
+    std::cout << "centroid: " << centroid.x << " " << centroid.y << " " << centroid.z << std::endl;
 
-    Mat res = getGrid2D(h_map, 10, 55, 85);
-    namedWindow("2D Map", WINDOW_AUTOSIZE);
-    imshow("2D Map", res);
+    // Mat res = getGrid2D(h_map, 10, 55, 85);
+    // namedWindow("2D Map", WINDOW_AUTOSIZE);
+    // imshow("2D Map", res);
 
-    inflateObstacles2D(h_map, 0.11, 0.11, 10, 55, 85);
+    // inflateObstacles2D(h_map, 0.2, 10, 55, 85);
 
-    Mat res2 = getGrid2D(h_map, 10, 55, 85);
-    namedWindow("Inflated 2D Map", WINDOW_AUTOSIZE);
-    imshow("Inflated 2D Map", res2);
-    waitKey(0);
+    // Mat res2 = getGrid2D(h_map, 10, 55, 85);
+    // namedWindow("Inflated 2D Map", WINDOW_AUTOSIZE);
+    // imshow("Inflated 2D Map", res2);
+    // waitKey(0);
+
+    bestObservationPoint2D(h_map, centroid, cluster, sizeCluster, 10, 15, 10);
 
     freeMap(h_map);
 }
