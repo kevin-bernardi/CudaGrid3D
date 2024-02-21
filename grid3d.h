@@ -297,7 +297,7 @@ void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::P
 /// @param occupiedThreshold min confidence for an occupied cell
 void inflateObstacles2D(Map *h_map, double radius, int freeThreshold, int warningThreshold, int occupiedThreshold);
 
-void bestObservationPoint2D(Map *h_map, CudaGrid3D::IntPoint bestCentroid, CudaGrid3D::IntPoint *cluster, int sizeCluster, double distance, double degrees, int freeThreshold);
+void bestObservationPoint2D(Map *h_map, CudaGrid3D::IntPoint clusterCenter, CudaGrid3D::IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters);
 
 }  // namespace CudaGrid3D
 
