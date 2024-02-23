@@ -22,7 +22,7 @@ $(SHARED_LIB_NAME).so: $(PROGRAM).o
 	g++ -shared -fPIC -o $(SHARED_LIB_NAME).so $(PROGRAM).o $(LIBS_CUDA) $(LIBS_CIMG) $(LIBS_OPENCV)
 
 $(PROGRAM).o: $(PROGRAM).cu $(PROGRAM).h
-	nvcc -c -Xcompiler -fPIC $(PROGRAM).cu $(INCLUDE_OPENCV)
+	nvcc -c -Xcompiler -Wall -Xcompiler -fPIC $(PROGRAM).cu $(INCLUDE_OPENCV)
 
 clean:
 	rm -f $(PROGRAM).o $(SHARED_LIB_NAME).so *.obj *.bmp $(OUTPUT)

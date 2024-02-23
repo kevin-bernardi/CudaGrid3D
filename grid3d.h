@@ -29,6 +29,8 @@ class Map {
     int dimX = 0;
     int dimY = 0;
     int dimZ = 0;
+    int ox = 0;
+    int oy = 0;
     float cellSize = 0.0;
     int floorMargin = 0;
     int robotHeight = 0;
@@ -54,10 +56,12 @@ enum MeshType {
 /// @param dimX Length of the x-axis of the grid (meters)
 /// @param dimY Length of the y-axis of the grid (meters)
 /// @param dimZ Length of the z-axis of the grid (meters)
+/// @param ox Position of the origin on x (meters)
+/// @param oy Position of the origin on y (meters)
 /// @param cellSize Voxel edge length (meters)
 /// @param floorMargin Bottom margin for 2D projection of the 3D Grid (meters)
 /// @param robotHeight Top margin for 2D projection of the 3D Grid (meters)
-void initMap(Map *h_map, float dimX, float dimY, float dimZ, float cellSize, float floorMargin, float robotHeight);
+void initMap(Map *h_map, float dimX, float dimY, float dimZ, float ox, float oy, float cellSize, float floorMargin, float robotHeight);
 
 /// @brief Free struct (allocated on the host) and the grids (allocated on the device)
 /// @param h_map Map struct to be freed
@@ -208,11 +212,6 @@ void printPointcloud(Point *d_pointcloud, int numPoints);
 
 // ------------------------
 
-// void vertex(FILE *file, float x, float y, float z);
-// void face(FILE *file, int v1, int v2, int v3);
-// void cubeVertex(FILE *file, float res, float x, float y, float z);
-// void cubeFace(FILE *file, int nCube);
-
 // functions for 3D mesh generation (.obj)
 
 /// @brief Generate a mesh of the 2D grid
@@ -230,6 +229,8 @@ void generateMesh3D(Map *h_map, const char *path);
 /// @param path save path of the mesh
 /// @param isOccupationMesh if true generates a mesh of the occupied space, otherwise a mesh of the free space is created
 void generateSimpleMesh3D(Map *h_map, const char *path, MeshType meshType);
+
+// ------------------------
 
 /// @brief Find the free cells with a ray tracing algorithm.
 /// Each ray starts at origin and ends at the first encountered obstacle in its path
@@ -284,10 +285,10 @@ cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occup
 /// @param h_map map
 /// @param maxClusterRadiusMeters max distance of a point from its centroid in a cluster
 /// @param origin robot position
-/// @param bestCentroid centroid of the best cluster (result)
+/// @param bestCentroid centroid in meters of the best cluster (result)
 /// @param cluster list of points in the best cluster (result)
 /// @param sizeCluster number of points in the best cluster (result)
-void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::IntPoint *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster);
+void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::Point *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster);
 
 /// @brief Inflate the obstacles in the occupancy map
 /// @param h_map map
@@ -297,7 +298,18 @@ void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::P
 /// @param occupiedThreshold min confidence for an occupied cell
 void inflateObstacles2D(Map *h_map, double radius, int freeThreshold, int warningThreshold, int occupiedThreshold);
 
-void bestObservationPoint2D(Map *h_map, CudaGrid3D::IntPoint clusterCenter, CudaGrid3D::IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters);
+/// @brief Compute the best point in the map to observe the cluster. The points are searched on the circumference on the 2D map
+/// with the centre as the projected cluster centroid on the 2D map and with a specified radius
+/// @param h_map map
+/// @param clusterCenterMeters centroid of the cluster to observe (coordinates in meters)
+/// @param cluster cluster to observe
+/// @param sizeCluster number of points in the cluster to observe
+/// @param radiusMeters distance from the projected cluster centroid on the 2D map where to look for the best observation point
+/// @param angleIntervalDeg search for a point every x degrees on the circumference
+/// @param freeThreshold max confidence for a free cell
+/// @param cameraHeightMeters camera z-position
+/// @return best observation point (coordinates in meters)
+Point bestObservationPoint2D(Map *h_map, CudaGrid3D::Point clusterCenterMeters, CudaGrid3D::IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters);
 
 }  // namespace CudaGrid3D
 

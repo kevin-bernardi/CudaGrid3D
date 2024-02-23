@@ -11,6 +11,8 @@ int main(int argc, char* argv[]) {
     float dimX = 10;  // meters
     float dimY = 10;  // meters
     float dimZ = 10;  // meters
+    float ox = 5;     // meters
+    float oy = 5;     // meters
     float cellSize = 0.1;
     float floorMargin = 0.2;
     float robotHeight = 0.4;
@@ -34,7 +36,7 @@ int main(int argc, char* argv[]) {
     ori.z = 0.0;
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, floorMargin, robotHeight);
+    initMap(h_map, dimX, dimY, dimZ, ox, oy, cellSize, floorMargin, robotHeight);
 
     std::cout << h_map->dimX << " " << h_map->dimY << " " << h_map->dimZ << std::endl;
     std::cout << h_map->floorMargin << " " << h_map->robotHeight << std::endl;
@@ -50,33 +52,25 @@ int main(int argc, char* argv[]) {
 
     generateSimpleMesh3D(h_map, "./mesh.obj", FRONTIER_MAP);
 
-    CudaGrid3D::IntPoint centroid;
+    CudaGrid3D::Point centroid;
     IntPoint* cluster;
     int sizeCluster;
 
     clusterFrontiers3D(h_map, 0.5, ori, &centroid, &cluster, &sizeCluster);
 
-    // std::cout << "print in example" << std::endl;
-
-    for (int i = 0; i < 10; i++) {
-        std::cout << "pt " << cluster[i].x << " " << cluster[i].y << " " << cluster[i].z << std::endl;
-    }
-
-    std::cout << "size cluster: " << sizeCluster << std::endl;
-    std::cout << "centroid: " << centroid.x << " " << centroid.y << " " << centroid.z << std::endl;
-
-    bestObservationPoint2D(h_map, centroid, cluster, sizeCluster, 1, 15, 10, 0.75);
-
-    // Mat res = getGrid2D(h_map, 10, 55, 85);
-    // namedWindow("2D Map", WINDOW_AUTOSIZE);
-    // imshow("2D Map", res);
+    std::cout << "size best cluster: " << sizeCluster << std::endl;
+    std::cout << "centroid best cluster: " << centroid.x << "m " << centroid.y << "m " << centroid.z << "m" << std::endl;
 
     inflateObstacles2D(h_map, 0.2, 10, 55, 85);
 
-    Mat res2 = getGrid2D(h_map, 10, 55, 85);
+    CudaGrid3D::Point bestObsPoint = bestObservationPoint2D(h_map, centroid, cluster, sizeCluster, 1, 15, 10, 0.75);
+
+    Mat res = getGrid2D(h_map, 10, 55, 85);
     namedWindow("Inflated 2D Map", WINDOW_AUTOSIZE);
-    imshow("Inflated 2D Map", res2);
+    imshow("Inflated 2D Map", res);
     waitKey(0);
 
     freeMap(h_map);
+
+    std::cout << "Best obs point in example.cpp: x:" << bestObsPoint.x << "m y:" << bestObsPoint.y << "m z:" << bestObsPoint.z << "m" << std::endl;
 }

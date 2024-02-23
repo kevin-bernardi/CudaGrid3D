@@ -18,11 +18,12 @@
   - [getGrid2D](#getgrid2d)
   - [clusterFrontiers3D](#clusterfrontiers3d)
   - [inflateObstacles2D](#inflateobstacles2d)
+  - [bestObservationPoint2D](#bestobservationpoint2d)
 
 
 ## initMap
 
-`void initMap(Map *h_map, float dimX, float dimY, float dimZ, float cellSize, float floorVoxelsMargin, float robotVoxelsHeight)`
+`void initMap(Map *h_map, float dimX, float dimY, float dimZ, float ox, float oy, float cellSize, float floorMargin, float robotHeight)`
 
 Initialize the Map on the host and the grids (both 2D and 3D) on the device.
 
@@ -32,6 +33,8 @@ Initialize the Map on the host and the grids (both 2D and 3D) on the device.
 | dimX        | Length of the x-axis of the grid (meters)                |
 | dimY        | Length of the y-axis of the grid (meters)                |
 | dimZ        | Length of the z-axis of the grid (meters)                |
+| ox          | Position of the origin on the x-axis (meters)            |
+| oy          | Position of the origin on the y-axis (meters)            |
 | cellSize    | Edge length of each cell (meters)                        |
 | floorMargin | Floor margin to not consider in 2D grid updates (meters) |
 | robotHeight | Height of the robot (meters)                             |
@@ -113,8 +116,6 @@ Converts an array of points in the format [point0_x, point0_y, point0_z, point0_
 | tf           | CudaTransform3D object with translation vector and rotation matrix |
 
 ## printPointcloud
-
-
 
 `void printPointcloud(Point *d_pointcloud, int numPoints)`
 
@@ -268,6 +269,23 @@ Inflate the obstacles in the 2D occupancy map
 | freeThreshold     | Max confidence for a free cell      |
 | warningThreshold  | Min confidence for a warning cell   |
 | occupiedThreshold | Min confidence for an occupied cell |
+
+## bestObservationPoint2D
+
+`CudaGrid3D::Point bestObservationPoint2D(Map *h_map, CudaGrid3D::Point clusterCenterMeters, CudaGrid3D::IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters)`
+
+Compute the best point in the map to observe the cluster. The points are searched on the circumference on the 2D map with the centre as the projected cluster centroid on the 2D map and with a specified radius
+
+| Parameter           | Description                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------- |
+| h_map               | Map struct                                                                                              |
+| clusterCenterMeters | Centroid of the cluster to observe (coordinates in meters)                                              |
+| cluster             | Array of points of the cluster to observe                                                               |
+| sizeCluster         | Number of points in the cluster to observe                                                              |
+| radiusMeters        | Distance from the projected cluster centroid on the 2D map where to look for the best observation point |
+| angleIntervalDeg    | Search for a point every x degrees on the circumference                                                 |
+| freeThreshold       | Max confidence for a free cell                                                                          |
+| cameraHeightMeters  | Camera z-position (meters)                                                                              |
 
 
 

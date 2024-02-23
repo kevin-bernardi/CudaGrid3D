@@ -68,7 +68,7 @@ __global__ void initMapKernel(char *d_grid_2D, char *d_grid_3D, int numCellsGrid
 }
 
 // initialize 3d grid, make every cell false
-void CudaGrid3D::initMap(Map *h_map, float dimX, float dimY, float dimZ, float cellSize, float floorMargin, float robotHeight) {
+void CudaGrid3D::initMap(Map *h_map, float dimX, float dimY, float dimZ, float ox, float oy, float cellSize, float floorMargin, float robotHeight) {
     if (cellSize <= 0.0) {
         printf("ERROR initMap(): cellSize must be bigger than 0.0\n");
         return;
@@ -78,12 +78,18 @@ void CudaGrid3D::initMap(Map *h_map, float dimX, float dimY, float dimZ, float c
     int dimYCells = ceil(dimY / cellSize);
     int dimZCells = ceil(dimZ / cellSize);
 
+    int oxCells = ceil(ox / cellSize);
+    int oyCells = ceil(oy / cellSize);
+
     int floorMarginCells = ceil(floorMargin / cellSize);
     int robotHeightCells = ceil(robotHeight / cellSize);
 
     h_map->dimX = dimXCells;
     h_map->dimY = dimYCells;
     h_map->dimZ = dimZCells;
+
+    h_map->ox = oxCells;
+    h_map->oy = oyCells;
 
     h_map->cellSize = cellSize;
 
@@ -287,7 +293,7 @@ void CudaGrid3D::generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int 
     // cudaDeviceSynchronize();
 }
 
-__global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGrid3D::Point *pointcloud, int n, int dimX, int dimY, int dimZ, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight) {
+__global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGrid3D::Point *pointcloud, int n, int dimX, int dimY, int dimZ, int ox, int oy, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     // check if point is within the pointcloud vector of lenght n
@@ -308,23 +314,11 @@ __global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGri
             return;
         }
 
-        x += (dimX / 2);
-        y += (dimY / 2);
-        // z += (dimZ / 10);
-
-        // int x = floor(pt.x / cellSize) + (dimX / 2);
-        // int y = floor(pt.y / cellSize) + (dimY / 2);
-        // int z = floor(pt.z / cellSize);
-
-        // printf("Floored point (%f, %f, %f): %d, %d, %d\n", pt.x, pt.y, pt.z, x, y, z);
+        x += ox;
+        y += oy;
 
         if (x < dimX && y < dimY && z < dimZ && x >= 0 && y >= 0 && z >= 0) {
             int idx3D = getIdx3DDevice(dimX, dimY, dimZ, x, y, z);
-
-            // int idx3D = y + x * dimY + z * dimX * dimY;
-
-            // printf("Adding Point (%f, %f, %f)\n", pt.x, pt.y, pt.z);
-            // printf("The point is floored to (%d, %d, %d) and added at idx %d\n", x, y, z, idx);
 
             // always check if idx3D is valid (getIdx3D returns -1 if the point is out of bound)
             if (idx3D >= 0) {
@@ -348,7 +342,7 @@ void CudaGrid3D::insertPointcloud(Map *h_map, Point *d_pointcloud, int numPoints
     int numBlocks = (numPoints + 256) / 256;
     // printf("Size of pointcloud: %d\n", numPoints);
 
-    insertPointcloudKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, d_pointcloud, numPoints, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->cellSize, h_map->floorMargin, h_map->robotHeight);
+    insertPointcloudKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, d_pointcloud, numPoints, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->ox, h_map->oy, h_map->cellSize, h_map->floorMargin, h_map->robotHeight);
     // cudaDeviceSynchronize();
 }
 
@@ -889,7 +883,7 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, CudaGrid3D:
     return false;
 }
 
-__global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointcloud, int numPoints, int dimX, int dimY, int dimZ, float cellSize, CudaGrid3D::Point ray_start, bool freeObstacles) {
+__global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointcloud, int numPoints, int dimX, int dimY, int dimZ, int ox, int oy, float cellSize, CudaGrid3D::Point ray_start, bool freeObstacles) {
     // thread id
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -916,13 +910,11 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
 
         // printf("last voxel: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
 
-        current_voxel.x += (dimX / 2);
-        current_voxel.y += (dimY / 2);
-        // current_voxel.z += (dimZ / 10);
+        current_voxel.x += ox;
+        current_voxel.y += oy;
 
-        last_voxel.x += (dimX / 2);
-        last_voxel.y += (dimY / 2);
-        // last_voxel.z += (dimZ / 10);
+        last_voxel.x += ox;
+        last_voxel.y += oy;
 
         // end the ray a diagonal cell before if freeObstacles is active (true)
 
@@ -1035,7 +1027,7 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
 
 void CudaGrid3D::pointcloudRayTracing(Map *h_map, CudaGrid3D::Point *d_pointcloud, int numPoints, CudaGrid3D::Point origin, bool freeObstacles) {
     int numBlocks = (numPoints + 256) / 256;
-    rayTracingKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, d_pointcloud, numPoints, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->cellSize, origin, freeObstacles);
+    rayTracingKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, d_pointcloud, numPoints, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->ox, h_map->oy, h_map->cellSize, origin, freeObstacles);
     cudaDeviceSynchronize();
 }
 
@@ -1433,8 +1425,8 @@ Mat getGrid2DTask(CudaGrid3D::Map *h_map, int freeThreshold, int warningThreshol
     }
 
     if (displayRobotPosition) {
-        int robot_pos_x = approxFloat(robotPosition->tra[0] / h_map->cellSize) + (h_map->dimX / 2);
-        int robot_pos_y = approxFloat(robotPosition->tra[1] / h_map->cellSize) + (h_map->dimY / 2);
+        int robot_pos_x = approxFloat(robotPosition->tra[0] / h_map->cellSize) + (h_map->ox);
+        int robot_pos_y = approxFloat(robotPosition->tra[1] / h_map->cellSize) + (h_map->oy);
 
         // opencv inverts row and columns for points
         cv::Point robot_circle_center(robot_pos_y, robot_pos_x);
@@ -1456,161 +1448,11 @@ Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, i
     return getGrid2DTask(h_map, freeThreshold, warningThreshold, occupiedThreshold, true, robotPosition, markerRadius);
 }
 
-/*
-
-__global__ void initFrontierToCluster(int *arr, int length) {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (tid < length) {
-        arr[tid] = -1;
-    }
-}
-
-__device__ double euclideanDistance(CudaGrid3D::IntPoint p1, CudaGrid3D::IntPoint p2) {
-    int diff_x = p1.x - p2.x;
-    int diff_y = p1.y - p2.y;
-    int diff_z = p1.z - p2.z;
-    return sqrt(pow(diff_x, 2) + pow(diff_y, 2) + pow(diff_z, 2));
-}
-
-__global__ void checkPointAssignmentDifferences(char *old_frontierToCluster, char *new_frontierToCluster, int length, int *d_diff) {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (tid < length && *d_diff == 0) {
-        if (old_frontierToCluster[tid] != new_frontierToCluster[tid]) {
-            atomicAdd(d_diff, 1);
-        }
-    }
-}
-
-__global__ void clusterFrontiers3DKernel(char *d_grid_3D, int dimX, int dimY, int dimZ, CudaGrid3D::IntPoint center1, CudaGrid3D::IntPoint center2, int *d_frontierToCluster, int *d_numPointsTo1, int *d_numPointsTo2, unsigned int *new_center1, unsigned int *new_center2) {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (tid < dimX * dimY * dimZ) {
-        if (d_grid_3D[tid] == FRONTIER_CELL) {
-            int z = tid / (dimX * dimY);
-            int x = (tid - (z * dimX * dimY)) / dimY;
-            int y = tid - (x * dimY + z * dimX * dimY);
-
-            printf("frontier idx %d (%d, %d, %d)\n", tid, x, y, z);
-
-            CudaGrid3D::IntPoint pt;
-            pt.x = x;
-            pt.y = y;
-            pt.z = z;
-
-            double distance1 = euclideanDistance(pt, center1);
-            double distance2 = euclideanDistance(pt, center2);
-
-            printf("point n. %d, distance1: %f, distance2: %f\n", tid, distance1, distance2);
-
-            if (distance1 <= distance2) {
-                d_frontierToCluster[tid] = 1;
-                atomicAdd(d_numPointsTo1, 1);
-                atomicAdd()
-                    printf("point n. %d assigned to 1\n", tid);
-            } else {
-                d_frontierToCluster[tid] = 2;
-                atomicAdd(d_numPointsTo2, 1);
-                printf("point n. %d assigned to 2\n", tid);
-            }
-        }
-    }
-}
-
-void initDevicePoint(CudaGrid3D::DevicePoint *pt) {
-    unsigned int initVal = 0;
-
-    unsigned int *d_x;
-    unsigned int *d_y;
-    unsigned int *d_z;
-
-    cudaMalloc((void **)&d_x, sizeof(unsigned int));
-    cudaMalloc((void **)&d_y, sizeof(unsigned int));
-    cudaMalloc((void **)&d_z, sizeof(unsigned int));
-
-    cudaMemcpy(d_x, &initVal, sizeof(unsigned int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_y, &initVal, sizeof(unsigned int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_z, &initVal, sizeof(unsigned int), cudaMemcpyHostToDevice);
-
-    pt->d_x = d_x;
-    pt->d_y = d_y;
-    pt->d_z = d_z;
-}
-
-void CudaGrid3D::clusterFrontiers3D(Map *h_map) {
-    int numCells = h_map->dimX * h_map->dimY * h_map->dimZ;
-    int numBlocks = (numCells + 256) / 256;
-
-    srand(time(NULL));
-
-    IntPoint center1;
-
-    center1.x = rand() % h_map->dimX;
-    center1.y = rand() % h_map->dimY;
-    center1.z = rand() % h_map->dimZ;
-
-    IntPoint center2;
-
-    center2.x = rand() % h_map->dimX;
-    center2.y = rand() % h_map->dimY;
-    center2.z = rand() % h_map->dimZ;
-
-    printf("centroid 1: (%d, %d, %d)\n", center1.x, center1.y, center1.z);
-    printf("centroid 2: (%d, %d, %d)\n", center2.x, center2.y, center2.z);
-
-    int *d_frontierToCluster;
-
-    cudaMalloc((void **)&d_frontierToCluster, numCells * sizeof(int));
-
-    int numPointsTo1 = 0;
-    int numPointsTo2 = 0;
-
-    int *d_numPointsTo1;
-    int *d_numPointsTo2;
-
-    cudaMalloc(&d_numPointsTo1, sizeof(int));
-    cudaMalloc(&d_numPointsTo2, sizeof(int));
-
-    cudaMemcpy(d_numPointsTo1, &numPointsTo1, sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_numPointsTo2, &numPointsTo2, sizeof(int), cudaMemcpyHostToDevice);
-
-    initFrontierToCluster<<<numBlocks, 256>>>(d_frontierToCluster, numCells);
-
-    DevicePoint *new_center1;
-    DevicePoint *new_center2;
-
-    initDevicePoint(new_center1);
-    initDevicePoint(new_center2);
-
-    clusterFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ, center1, center2, d_frontierToCluster, d_numPointsTo1, d_numPointsTo2, new_center1, new_center2);
-    cudaDeviceSynchronize();
-
-    cudaMemcpy(&numPointsTo1, d_numPointsTo1, sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(&numPointsTo2, d_numPointsTo2, sizeof(int), cudaMemcpyDeviceToHost);
-
-    printf("cluster 1: %d points\ncluster 2: %d points\n", numPointsTo1, numPointsTo2);
-}
-
-*/
-
-double distance(CudaGrid3D::Point *p1, CudaGrid3D::Point *p2) {
+double euclideanDistance3D(CudaGrid3D::Point *p1, CudaGrid3D::Point *p2) {
     double diff_x = p1->x - p2->x;
     double diff_y = p1->y - p2->y;
     double diff_z = p1->z - p2->z;
     return sqrt(pow(diff_x, 2) + pow(diff_y, 2) + pow(diff_z, 2));
-}
-
-void cellToMeterPoint(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *pt, CudaGrid3D::Point *result) {
-    result->x = (floor(pt->x) - (h_map->dimX / 2)) * h_map->cellSize;
-    result->y = (floor(pt->y) - (h_map->dimY / 2)) * h_map->cellSize;
-    result->z = (floor(pt->z)) * h_map->cellSize;
-}
-
-void meterToCellPoint(CudaGrid3D::Map *h_map, CudaGrid3D::Point *pt, CudaGrid3D::IntPoint *result) {
-    result->x = (approxFloat(pt->x / h_map->cellSize)) + (h_map->dimX / 2);
-    result->y = (approxFloat(pt->y / h_map->cellSize)) + (h_map->dimY / 2);
-    result->z = (approxFloat(pt->z / h_map->cellSize));
 }
 
 void scanFrontiers(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *frontiers, int *numFrontiers) {
@@ -1650,7 +1492,7 @@ void printFrontiers(CudaGrid3D::IntPoint *frontiers, int numFrontiers) {
     }
 }
 
-void kMeansDivisiveClustering(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *frontiers, int numFrontiers, int maxClusterRadiusCells, CudaGrid3D::IntPoint *candidatePoints, int *pointsPerCluster, CudaGrid3D::IntPoint **clusters, int *idxCluster) {
+void kMeansDivisiveClustering(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *frontiers, int numFrontiers, int maxClusterRadiusCells, CudaGrid3D::IntPoint *clusterCentroids, int *pointsPerCluster, CudaGrid3D::IntPoint **clusters, int *idxCluster) {
     int idxCentroid1 = rand() % numFrontiers;
     int idxCentroid2 = rand() % numFrontiers;
 
@@ -1711,8 +1553,8 @@ void kMeansDivisiveClustering(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *fron
             frontier.z = frontier_int.z;
 
             // distance in number of cells
-            double dist1 = distance(&frontier, &centroid1);
-            double dist2 = distance(&frontier, &centroid2);
+            double dist1 = euclideanDistance3D(&frontier, &centroid1);
+            double dist2 = euclideanDistance3D(&frontier, &centroid2);
 
             // printf("point %d, %d, %d\n", pt.x, pt.y, pt.z);
             // printf("point %d distances: %.3f %.3f\n", i, dist1, dist2);
@@ -1787,14 +1629,14 @@ void kMeansDivisiveClustering(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *fron
         }
     }
     if (numPointsTo1 > 1 && maxDistanceCluster1 > maxClusterRadiusCells) {
-        kMeansDivisiveClustering(h_map, pointsCluster1, numPointsTo1, maxClusterRadiusCells, candidatePoints, pointsPerCluster, clusters, idxCluster);
+        kMeansDivisiveClustering(h_map, pointsCluster1, numPointsTo1, maxClusterRadiusCells, clusterCentroids, pointsPerCluster, clusters, idxCluster);
     } else {
         CudaGrid3D::IntPoint centroid1_int;
         centroid1_int.x = centroid1.x;
         centroid1_int.y = centroid1.y;
         centroid1_int.z = centroid1.z;
 
-        candidatePoints[*idxCluster] = centroid1_int;
+        clusterCentroids[*idxCluster] = centroid1_int;
         pointsPerCluster[*idxCluster] = numPointsTo1;
         clusters[*idxCluster] = pointsCluster1;
         (*idxCluster)++;
@@ -1810,21 +1652,21 @@ void kMeansDivisiveClustering(CudaGrid3D::Map *h_map, CudaGrid3D::IntPoint *fron
     }
 
     if (numPointsTo2 > 1 && maxDistanceCluster2 > maxClusterRadiusCells) {
-        kMeansDivisiveClustering(h_map, pointsCluster2, numPointsTo2, maxClusterRadiusCells, candidatePoints, pointsPerCluster, clusters, idxCluster);
+        kMeansDivisiveClustering(h_map, pointsCluster2, numPointsTo2, maxClusterRadiusCells, clusterCentroids, pointsPerCluster, clusters, idxCluster);
     } else {
         CudaGrid3D::IntPoint centroid2_int;
         centroid2_int.x = centroid2.x;
         centroid2_int.y = centroid2.y;
         centroid2_int.z = centroid2.z;
 
-        candidatePoints[*idxCluster] = centroid2_int;
+        clusterCentroids[*idxCluster] = centroid2_int;
         pointsPerCluster[*idxCluster] = numPointsTo2;
         clusters[*idxCluster] = pointsCluster2;
         (*idxCluster)++;
     }
 }
 
-void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::IntPoint *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster) {
+void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::Point *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster) {
     srand(time(NULL));
     int numCells = h_map->dimX * h_map->dimY * h_map->dimZ;
 
@@ -1833,12 +1675,8 @@ void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRad
 
     scanFrontiers(h_map, frontiers, &numFrontiers);
 
-    printf("num frontiers: %d\n", numFrontiers);
-    // printFrontiers(frontiers, numFrontiers);
-
-    IntPoint *candidatePoints = (IntPoint *)malloc(numFrontiers * sizeof(IntPoint));
+    IntPoint *clusterCentroids = (IntPoint *)malloc(numFrontiers * sizeof(IntPoint));
     int *pointsPerCluster = (int *)malloc(numFrontiers * sizeof(int));
-    // IntPoint **clusters = (IntPoint **)malloc(numFrontiers * sizeof(IntPoint *));
     IntPoint *clusters[numFrontiers];
 
     int idxCluster = 0;
@@ -1846,11 +1684,9 @@ void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRad
     // convert max cluster radius from meters to number of cells
     int maxClusterRadiusCells = ceil(maxClusterRadiusMeters / h_map->cellSize);
 
-    kMeansDivisiveClustering(h_map, frontiers, numFrontiers, maxClusterRadiusCells, candidatePoints, pointsPerCluster, clusters, &idxCluster);
+    kMeansDivisiveClustering(h_map, frontiers, numFrontiers, maxClusterRadiusCells, clusterCentroids, pointsPerCluster, clusters, &idxCluster);
 
     free(frontiers);
-
-    printf("num cluster: %d\n", idxCluster);
 
     // double *clusterGain = (double *)malloc(idxCluster * sizeof(double));
     int idxBestCluster = 0;
@@ -1858,14 +1694,14 @@ void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRad
     CudaGrid3D::Point bestCentroidMeters;
 
     for (int i = 0; i < idxCluster; i++) {
-        CudaGrid3D::Point candidatePointInMeters;
-        candidatePointInMeters.x = (floor(candidatePoints[i].x) - (h_map->dimX / 2)) * h_map->cellSize;
-        candidatePointInMeters.y = (floor(candidatePoints[i].y) - (h_map->dimY / 2)) * h_map->cellSize;
-        candidatePointInMeters.z = (floor(candidatePoints[i].z)) * h_map->cellSize;
-        // candidatePoints[i] = candidatePointInMeters;
+        CudaGrid3D::Point clusterCentroidInMeters;
+        clusterCentroidInMeters.x = (floor(clusterCentroids[i].x) - (h_map->ox)) * h_map->cellSize;
+        clusterCentroidInMeters.y = (floor(clusterCentroids[i].y) - (h_map->oy)) * h_map->cellSize;
+        clusterCentroidInMeters.z = (floor(clusterCentroids[i].z)) * h_map->cellSize;
 
-        double robotCentroidDistance = distance(&origin, &candidatePointInMeters);
+        double robotCentroidDistance = euclideanDistance3D(&origin, &clusterCentroidInMeters);
         double gain = pointsPerCluster[i] / pow(robotCentroidDistance, 2);
+
         // clusterGain[i] = gain;
         // printf("candidate point in meters: %.3f, %.3f, %.3f\n", candidatePointInMeters.x, candidatePointInMeters.y, candidatePointInMeters.z);
         // printf("gain %.3f, points %d, distance %.3f\n", gain, pointsPerCluster[i], robotCentroidDistance);
@@ -1873,23 +1709,18 @@ void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRad
         if (gain > gainBestCluster) {
             idxBestCluster = i;
             gainBestCluster = gain;
-            bestCentroidMeters = candidatePointInMeters;
+            bestCentroidMeters = clusterCentroidInMeters;
         }
     }
 
-    printf("\nbest candidate point %d: (%.3fm, %.3fm, %.3fm)\n", idxBestCluster, bestCentroidMeters.x, bestCentroidMeters.y, bestCentroidMeters.z);
-    printf("\nbest candidate point cells %d: (%d, %d, %d)\n", idxBestCluster, candidatePoints[idxBestCluster].x, candidatePoints[idxBestCluster].y, candidatePoints[idxBestCluster].z);
+    // printf("\nbest candidate centroid %d: (%.3fm, %.3fm, %.3fm)\n", idxBestCluster, bestCentroidMeters.x, bestCentroidMeters.y, bestCentroidMeters.z);
+    // printf("\nbest candidate centroid cells %d: (%d, %d, %d)\n", idxBestCluster, clusterCentroids[idxBestCluster].x, clusterCentroids[idxBestCluster].y, clusterCentroids[idxBestCluster].z);
 
-    printf("points in cluster %d: %d\n", idxBestCluster, pointsPerCluster[idxBestCluster]);
-    printf("gain of cluster %d: %.3f\n\n", idxBestCluster, gainBestCluster);
-    printf("first 10 points in the cluster:\n");
+    // printf("points in cluster %d: %d\n", idxBestCluster, pointsPerCluster[idxBestCluster]);
+    // printf("gain of cluster %d: %.3f\n\n", idxBestCluster, gainBestCluster);
 
-    // for (int i = 0; i < 10; i++) {
-    //     CudaGrid3D::IntPoint pt = clusters[idxBestCluster][i];
-    //     printf("Point (%d, %d, %d)\n", pt.x, pt.y, pt.z);
-    // }
-
-    *bestCentroid = candidatePoints[idxBestCluster];
+    //*bestCentroid = clusterCentroids[idxBestCluster];
+    *bestCentroid = bestCentroidMeters;
     *cluster = clusters[idxBestCluster];
     *sizeCluster = pointsPerCluster[idxBestCluster];
 
@@ -1994,17 +1825,11 @@ __global__ void clusterRayTracingKernel(char *d_grid_3D, int dimX, int dimY, int
 
         CudaGrid3D::Point current_voxel = ray_start;
 
-        // if (tid == 0)
-        //     printf("current voxel: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
-
         CudaGrid3D::IntPoint pt = d_cluster[tid];
         CudaGrid3D::Point last_voxel;
         last_voxel.x = pt.x;
         last_voxel.y = pt.y;
         last_voxel.z = pt.z;
-
-        // if (tid == 0)
-        //     printf("last voxel: %f, %f, %f\n", last_voxel.x, last_voxel.y, last_voxel.z);
 
         // Compute normalized ray direction.
         CudaGrid3D::Point ray;
@@ -2012,8 +1837,6 @@ __global__ void clusterRayTracingKernel(char *d_grid_3D, int dimX, int dimY, int
         ray.x = last_voxel.x - current_voxel.x;
         ray.y = last_voxel.y - current_voxel.y;
         ray.z = last_voxel.z - current_voxel.z;
-
-        // printf("ray: %f, %f, %f\n", ray.x, ray.y, ray.z);
 
         // In which direction the voxel ids are incremented.
         float stepX = (ray.x >= 0) ? 1 : -1;
@@ -2041,13 +1864,7 @@ __global__ void clusterRayTracingKernel(char *d_grid_3D, int dimX, int dimY, int
 
         bool foundObstacle = false;
 
-        // printf("before cycle tMaxX=%f, tMaxY=%f, tMaxZ=%f\n", tMaxX, tMaxY, tMaxZ);
         while (current_voxel.x != last_voxel.x || current_voxel.y != last_voxel.y || current_voxel.z != last_voxel.z) {
-            // printf("tMaxX=%f, tMaxY=%f, tMaxZ=%f\n", tMaxX, tMaxY, tMaxZ);
-
-            // if (tid == 0)
-            //     printf("current voxel: %f, %f, %f\n", current_voxel.x, current_voxel.y, current_voxel.z);
-
             if (tMaxX < tMaxY) {
                 if (tMaxX < tMaxZ) {
                     current_voxel.x += stepX;
@@ -2084,24 +1901,23 @@ __global__ void clusterRayTracingKernel(char *d_grid_3D, int dimX, int dimY, int
     }
 }
 
-void CudaGrid3D::bestObservationPoint2D(Map *h_map, IntPoint clusterCenter, IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters) {
-    int x_centroid = clusterCenter.x;
-    int y_centroid = clusterCenter.y;
+CudaGrid3D::Point CudaGrid3D::bestObservationPoint2D(Map *h_map, Point clusterCenterMeters, IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters) {
+    int x_centroid = approxFloat(clusterCenterMeters.x / h_map->cellSize) + (h_map->ox);
+    int y_centroid = approxFloat(clusterCenterMeters.y / h_map->cellSize) + (h_map->oy);
 
-    printf("centroid x: %d, y: %d\n", x_centroid, y_centroid);
+    // printf("centroid x: %f, y: %f\n", clusterCenterMeters.x, clusterCenterMeters.y);
+    // printf("centroid x: %d, y: %d\n", x_centroid, y_centroid);
 
     int numCandidatePoints = (360 / angleIntervalDeg) + 1;
 
     Point candidatePoints[numCandidatePoints];
 
     double radius = radiusMeters / h_map->cellSize;
-    printf("radius cells: %.3f\n", radius);
+    // printf("radius cells: %.3f\n", radius);
 
     int idx = 0;
     for (double angleDeg = 0; angleDeg <= 360; angleDeg += angleIntervalDeg) {
         double angleRad = (M_PI * angleDeg) / 180;
-
-        // printf("deg: %f | rad: %f\n", angleDeg, angleRad);
 
         double x = radius * cos(angleRad) + x_centroid;
         double y = radius * sin(angleRad) + y_centroid;
@@ -2111,18 +1927,9 @@ void CudaGrid3D::bestObservationPoint2D(Map *h_map, IntPoint clusterCenter, IntP
         pt.y = y;
         pt.z = 0;
 
-        // printf("idx: %d\n", idx);
-
         candidatePoints[idx] = pt;
         idx++;
-
-        // printf("intersection: x %f | y %f\n", x, y);
     }
-
-    // for (int i = 0; i < numCandidatePoints; i++) {
-    //     Point pt = candidatePoints[i];
-    //     printf("int. point x=%.3f, y=%.3f\n", pt.x, pt.y);
-    // }
 
     Point freeCandidatePoints[numCandidatePoints];
 
@@ -2140,9 +1947,6 @@ void CudaGrid3D::bestObservationPoint2D(Map *h_map, IntPoint clusterCenter, IntP
 
         int idxGrid2D = point_y + point_x * h_map->dimY;
 
-        // printf("point x=%.3f, y=%.3f\n", pt.x, pt.y);
-        // printf("idx2D = %d\n", idxGrid2D);
-
         if (idxGrid2D >= 0 && idxGrid2D < (h_map->dimX * h_map->dimY)) {
             checkFreePoint2DKernel<<<1, 1>>>(h_map->d_grid_2D, idxGrid2D, freeThreshold, d_isFree);
 
@@ -2153,20 +1957,18 @@ void CudaGrid3D::bestObservationPoint2D(Map *h_map, IntPoint clusterCenter, IntP
             if (isFree) {
                 pt.x = point_x;
                 pt.y = point_y;
-                // TODO: aggiustare errore approssimazione
-                pt.z = floor((float)(cameraHeightMeters / h_map->cellSize));
+                pt.z = floor((cameraHeightMeters / h_map->cellSize));
                 freeCandidatePoints[idxFreeCandidatePoints] = pt;
                 idxFreeCandidatePoints++;
             }
         }
     }
 
-    // for (int i = 0; i < idxFreeCandidatePoints; i++) {
-    //     Point pt = freeCandidatePoints[i];
-    //     printf("int. free point x=%.3f, y=%.3f\n", pt.x, pt.y);
-    // }
-
-    // __global__ void clusterRayTracingKernel(char *d_grid_3D, int dimX, int dimY, int dimZ, CudaGrid3D::Point ray_start, CudaGrid3D::IntPoint *d_cluster, int sizeCluster, bool *d_isVisible) {
+    if (idxFreeCandidatePoints == 0) {
+        printf("There are no candidate points!\n");
+        Point pt_err;
+        return pt_err;
+    }
 
     int numVisiblePointsFromCandidate[idxFreeCandidatePoints];
 
@@ -2200,9 +2002,9 @@ void CudaGrid3D::bestObservationPoint2D(Map *h_map, IntPoint clusterCenter, IntP
 
     int idxBestPoint = 0;
     int maxNumVisiblePoints = 0;
-    printf("\n");
+    // printf("\n");
     for (int i = 0; i < idxFreeCandidatePoints; i++) {
-        printf("Candidate point %d -> %d\n", i, numVisiblePointsFromCandidate[i]);
+        // printf("Candidate point %d -> %d\n", i, numVisiblePointsFromCandidate[i]);
 
         if (numVisiblePointsFromCandidate[i] > maxNumVisiblePoints) {
             idxBestPoint = i;
@@ -2210,15 +2012,19 @@ void CudaGrid3D::bestObservationPoint2D(Map *h_map, IntPoint clusterCenter, IntP
         }
     }
     Point bestPoint = freeCandidatePoints[idxBestPoint];
-    printf("best point idx %d, (%f, %f, %f), num points: %d\n", idxBestPoint, bestPoint.x, bestPoint.y, bestPoint.z, maxNumVisiblePoints);
+    // printf("best point idx %d, (%f, %f, %f), num points: %d\n", idxBestPoint, bestPoint.x, bestPoint.y, bestPoint.z, maxNumVisiblePoints);
 
     Point bestPointMeters;
-    bestPointMeters.x = (bestPoint.x - (h_map->dimX / 2)) * h_map->cellSize;
-    bestPointMeters.y = (bestPoint.y - (h_map->dimY / 2)) * h_map->cellSize;
+
+    bestPointMeters.x = (bestPoint.x - (h_map->ox)) * h_map->cellSize;
+    bestPointMeters.y = (bestPoint.y - (h_map->oy)) * h_map->cellSize;
     bestPointMeters.z = bestPoint.z * h_map->cellSize;
 
-    printf("best point in meters (%f, %f, %f)\n", bestPointMeters.x, bestPointMeters.y, bestPointMeters.z);
+    // printf("best point in meters (%f, %f, %f)\n", bestPointMeters.x, bestPointMeters.y, bestPointMeters.z);
 
     cudaFree(d_isFree);
+    cudaFree(d_cluster);
     cudaFree(d_isVisible);
+
+    return bestPointMeters;
 }
