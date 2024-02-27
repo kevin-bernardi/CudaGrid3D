@@ -43,6 +43,13 @@ class CudaTransform3D {
     double rot[3][3];
 };
 
+class BestObservation {
+   public:
+    Point point;
+    double pitch;
+    double yaw;
+};
+
 /// @brief Mesh type: OCCUPANCY_MAP contains occupied points, FREE_MAP contains free points
 /// and FRONTIER_MAP contains frontier cells
 enum MeshType {
@@ -309,7 +316,7 @@ void inflateObstacles2D(Map *h_map, double radius, int freeThreshold, int warnin
 /// @param freeThreshold max confidence for a free cell
 /// @param cameraHeightMeters camera z-position
 /// @return best observation point (coordinates in meters)
-Point bestObservationPoint2D(Map *h_map, CudaGrid3D::Point clusterCenterMeters, CudaGrid3D::IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters);
+BestObservation bestObservationPoint(Map *h_map, CudaGrid3D::Point clusterCenterMeters, CudaGrid3D::IntPoint *cluster, int sizeCluster, double clusterDistanceMeters, double angleIntervalDeg, int freeThreshold, double z_min, double z_max, double z_interval);
 
 }  // namespace CudaGrid3D
 

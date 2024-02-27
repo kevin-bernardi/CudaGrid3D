@@ -1901,37 +1901,54 @@ __global__ void clusterRayTracingKernel(char *d_grid_3D, int dimX, int dimY, int
     }
 }
 
-CudaGrid3D::Point CudaGrid3D::bestObservationPoint2D(Map *h_map, Point clusterCenterMeters, IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters) {
+CudaGrid3D::BestObservation CudaGrid3D::bestObservationPoint(Map *h_map, Point clusterCenterMeters, IntPoint *cluster, int sizeCluster, double clusterDistanceMeters, double angleIntervalDeg, int freeThreshold, double z_min, double z_max, double z_interval) {
     int x_centroid = approxFloat(clusterCenterMeters.x / h_map->cellSize) + (h_map->ox);
     int y_centroid = approxFloat(clusterCenterMeters.y / h_map->cellSize) + (h_map->oy);
 
     // printf("centroid x: %f, y: %f\n", clusterCenterMeters.x, clusterCenterMeters.y);
     // printf("centroid x: %d, y: %d\n", x_centroid, y_centroid);
 
-    int numCandidatePoints = (360 / angleIntervalDeg) + 1;
+    if (z_min >= z_max) {
+        printf("ERROR bestObservationPoint(): z_max must be greater than z_min\n");
+    }
+
+    int numCandidatePointsPerLevel = (360 / angleIntervalDeg) + 1;
+    int levels = ((z_max - z_min) / z_interval) + 1;
+
+    int numCandidatePoints = numCandidatePointsPerLevel * levels;
 
     Point candidatePoints[numCandidatePoints];
 
-    double radius = radiusMeters / h_map->cellSize;
-    // printf("radius cells: %.3f\n", radius);
-
     int idx = 0;
-    for (double angleDeg = 0; angleDeg <= 360; angleDeg += angleIntervalDeg) {
-        double angleRad = (M_PI * angleDeg) / 180;
+    for (double z = z_min; z <= z_max; z += z_interval) {
+        double diff_z = clusterCenterMeters.z - z;
+        if (abs(clusterDistanceMeters) > abs(diff_z)) {
+            double radiusMeters = sqrt(pow(clusterDistanceMeters, 2) - pow(diff_z, 2));
+            double radius = radiusMeters / h_map->cellSize;
 
-        double x = radius * cos(angleRad) + x_centroid;
-        double y = radius * sin(angleRad) + y_centroid;
+            for (double angleDeg = 0; angleDeg <= 360; angleDeg += angleIntervalDeg) {
+                double angleRad = (M_PI * angleDeg) / 180;
 
-        Point pt;
-        pt.x = x;
-        pt.y = y;
-        pt.z = 0;
+                double x = radius * cos(angleRad) + x_centroid;
+                double y = radius * sin(angleRad) + y_centroid;
 
-        candidatePoints[idx] = pt;
-        idx++;
+                Point pt;
+                pt.x = x;
+                pt.y = y;
+                pt.z = z / h_map->cellSize;
+
+                candidatePoints[idx] = pt;
+                idx++;
+            }
+        }
     }
 
-    Point freeCandidatePoints[numCandidatePoints];
+    // for (int i = 0; i < idx; i++) {
+    //     Point pt = candidatePoints[i];
+    //     printf("cand point: %f %f %f\n", pt.x, pt.y, pt.z);
+    // }
+
+    Point freeCandidatePoints[idx];
 
     bool isFree;
     bool *d_isFree;
@@ -1939,11 +1956,12 @@ CudaGrid3D::Point CudaGrid3D::bestObservationPoint2D(Map *h_map, Point clusterCe
     cudaMalloc(&d_isFree, sizeof(bool));
 
     int idxFreeCandidatePoints = 0;
-    for (int i = 0; i < numCandidatePoints; i++) {
+    for (int i = 0; i < idx; i++) {
         Point pt = candidatePoints[i];
 
         int point_x = floor((float)pt.x);
         int point_y = floor((float)pt.y);
+        int point_z = floor((float)pt.z);
 
         int idxGrid2D = point_y + point_x * h_map->dimY;
 
@@ -1957,7 +1975,7 @@ CudaGrid3D::Point CudaGrid3D::bestObservationPoint2D(Map *h_map, Point clusterCe
             if (isFree) {
                 pt.x = point_x;
                 pt.y = point_y;
-                pt.z = floor((cameraHeightMeters / h_map->cellSize));
+                pt.z = point_z;
                 freeCandidatePoints[idxFreeCandidatePoints] = pt;
                 idxFreeCandidatePoints++;
             }
@@ -1966,8 +1984,8 @@ CudaGrid3D::Point CudaGrid3D::bestObservationPoint2D(Map *h_map, Point clusterCe
 
     if (idxFreeCandidatePoints == 0) {
         printf("There are no candidate points!\n");
-        Point pt_err;
-        return pt_err;
+        BestObservation bestObs_err;
+        return bestObs_err;
     }
 
     int numVisiblePointsFromCandidate[idxFreeCandidatePoints];
@@ -2000,6 +2018,11 @@ CudaGrid3D::Point CudaGrid3D::bestObservationPoint2D(Map *h_map, Point clusterCe
         }
     }
 
+    // for (int i = 0; i < idxFreeCandidatePoints; i++) {
+    //     Point pt = freeCandidatePoints[i];
+    //     printf("free cand point: %f %f %f | points: %d\n", pt.x, pt.y, pt.z, numVisiblePointsFromCandidate[i]);
+    // }
+
     int idxBestPoint = 0;
     int maxNumVisiblePoints = 0;
     // printf("\n");
@@ -2026,5 +2049,60 @@ CudaGrid3D::Point CudaGrid3D::bestObservationPoint2D(Map *h_map, Point clusterCe
     cudaFree(d_cluster);
     cudaFree(d_isVisible);
 
-    return bestPointMeters;
+    // compute the angles (pitch and yaw) from the best obs point to the cluster centroid
+
+    double diff_x = clusterCenterMeters.x - bestPointMeters.x;
+    double diff_y = clusterCenterMeters.y - bestPointMeters.y;
+    double diff_z = clusterCenterMeters.z - bestPointMeters.z;
+
+    if (diff_x == 0.0) {
+        diff_x = 0.000001;
+    }
+
+    double m1 = diff_y / diff_x;
+    double yaw = atan(m1);
+    yaw = yaw * 180 / M_PI;
+
+    /*
+                        yaw = -180 / 180
+                            |
+                            |
+                            |
+                            |
+    yaw = -90  ------------------------------     yaw = 90
+                            |
+                            |
+                            |
+                            |
+                        yaw = 0
+    */
+
+    if (diff_x < 0 && diff_y > 0) {
+        // the result above is between 0 and -90 degrees but the result should be in the 1st quadrant
+        yaw += 180;
+        // with +180 i can get a result between 90 and 180
+    } else if (diff_x < 0 && diff_y < 0) {
+        // the result above is between 0 and 90 but the result should be in the second quadrant
+        yaw -= 180;
+        // with -180 i can get a result between -90 and -180
+    }
+
+    double dist_xy = sqrt(pow(diff_x, 2) + pow(diff_y, 2));
+
+    if (dist_xy == 0.0) {
+        dist_xy = 0.000001;
+    }
+
+    double m2 = diff_z / dist_xy;
+    double pitch = atan(m2);
+    pitch = -pitch * 180 / M_PI;
+
+    // printf("pitch %.1f, yaw %.1f\n", pitch, yaw);
+
+    BestObservation result;
+    result.point = bestPointMeters;
+    result.pitch = pitch;
+    result.yaw = yaw;
+
+    return result;
 }

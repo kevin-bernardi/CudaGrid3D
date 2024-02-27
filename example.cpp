@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
     float cellSize = 0.1;
     float floorMargin = 0.2;
     float robotHeight = 0.4;
-    int numPoints = 10000;
+    int numPoints = 1000;
 
     if (argc == 8) {
         dimX = std::stoi(argv[1]);
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
 
     inflateObstacles2D(h_map, 0.2, 10, 55, 85);
 
-    CudaGrid3D::Point bestObsPoint = bestObservationPoint2D(h_map, centroid, cluster, sizeCluster, 1, 15, 10, 0.75);
+    CudaGrid3D::BestObservation bestObs = bestObservationPoint(h_map, centroid, cluster, sizeCluster, 1, 15, 10, 0.5, 2, 0.1);
 
     Mat res = getGrid2D(h_map, 10, 55, 85);
     namedWindow("Inflated 2D Map", WINDOW_AUTOSIZE);
@@ -72,5 +72,6 @@ int main(int argc, char* argv[]) {
 
     freeMap(h_map);
 
-    std::cout << "Best obs point in example.cpp: x:" << bestObsPoint.x << "m y:" << bestObsPoint.y << "m z:" << bestObsPoint.z << "m" << std::endl;
+    std::cout << "Best obs point in example.cpp: x:" << bestObs.point.x << "m y:" << bestObs.point.y << "m z:" << bestObs.point.z << "m" << std::endl;
+    std::cout << "pitch: " << bestObs.pitch << " yaw: " << bestObs.yaw << std::endl;
 }
