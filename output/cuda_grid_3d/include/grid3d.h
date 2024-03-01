@@ -31,6 +31,7 @@ class Map {
     int dimZ = 0;
     int ox = 0;
     int oy = 0;
+    int oz = 0;
     float cellSize = 0.0;
     int floorMargin = 0;
     int robotHeight = 0;
@@ -68,7 +69,7 @@ enum MeshType {
 /// @param cellSize Voxel edge length (meters)
 /// @param floorMargin Bottom margin for 2D projection of the 3D Grid (meters)
 /// @param robotHeight Top margin for 2D projection of the 3D Grid (meters)
-void initMap(Map *h_map, float dimX, float dimY, float dimZ, float ox, float oy, float cellSize, float floorMargin, float robotHeight);
+void initMap(Map *h_map, float dimX, float dimY, float dimZ, float ox, float oy, float oz, float cellSize, float floorMargin, float robotHeight);
 
 /// @brief Free struct (allocated on the host) and the grids (allocated on the device)
 /// @param h_map Map struct to be freed
@@ -254,11 +255,14 @@ void findFrontiers3D(Map *h_map);
 
 /// @brief Update occupied, free and unknown cells of the 2D grid using the data from 3D grid
 /// @param h_map map
-/// @param freeThreshold max confidence to mark a cell as free
+/// @param freeThreshold max confidence for a free cell
+/// @param warningThreshold min confidence for a warning cell
+/// @param occupiedThreshold min confidence for an occupied cell
 /// @param maxUnknownConfidence the confidence set if every voxel inside the height interval of the robot
 /// is unknown
 /// @param minOccupiedConfidence the confidence set if only one voxel is found in the height interval of the robot
-void updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int minOccupiedConfidence);
+/// @param inflationRadius obstacles inflation radius
+void updateGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, int maxUnknownConfidence, int minOccupiedConfidence, double inflationRadius);
 
 /// @brief Get a binned (reduced in resolution) density 2D grid of the unknown space
 /// @param h_map map
@@ -288,6 +292,8 @@ cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occup
 /// @return 2D occupancy map
 cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius);
 
+void getHostGrid(Map *h_map, char **h_grid_2D);
+
 /// @brief Cluster the frontier cells of the 3D Grid
 /// @param h_map map
 /// @param maxClusterRadiusMeters max distance of a point from its centroid in a cluster
@@ -296,14 +302,6 @@ cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occup
 /// @param cluster list of points in the best cluster (result)
 /// @param sizeCluster number of points in the best cluster (result)
 void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::Point origin, CudaGrid3D::Point *bestCentroid, CudaGrid3D::IntPoint **cluster, int *sizeCluster);
-
-/// @brief Inflate the obstacles in the occupancy map
-/// @param h_map map
-/// @param radius inflation radius
-/// @param freeThreshold max confidence for a free cell
-/// @param warningThreshold min confidence for a warning cell
-/// @param occupiedThreshold min confidence for an occupied cell
-void inflateObstacles2D(Map *h_map, double radius, int freeThreshold, int warningThreshold, int occupiedThreshold);
 
 /// @brief Compute the best point in the map to observe the cluster. The points are searched on the circumference on the 2D map
 /// with the centre as the projected cluster centroid on the 2D map and with a specified radius

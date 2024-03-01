@@ -55,6 +55,38 @@ __device__ float approxFloatKernel(float x) {
     }
 }
 
+int getCellType2D(int value, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+    if (value <= freeThreshold) {
+        return FREE_CELL;
+    } else if (value > freeThreshold && value < warningThreshold) {
+        return UNKNOWN_CELL;
+    } else if (value >= warningThreshold && value < occupiedThreshold) {
+        return WARNING_CELL;
+    } else if (value == FRONTIER_CELL) {
+        return FRONTIER_CELL;
+    } else if (value == INFLATED_CELL) {
+        return INFLATED_CELL;
+    } else {
+        return OCCUPIED_CELL;
+    }
+}
+
+__device__ int getCellType2DDevice(int value, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+    if (value <= freeThreshold) {
+        return FREE_CELL;
+    } else if (value > freeThreshold && value < warningThreshold) {
+        return UNKNOWN_CELL;
+    } else if (value >= warningThreshold && value < occupiedThreshold) {
+        return WARNING_CELL;
+    } else if (value == FRONTIER_CELL) {
+        return FRONTIER_CELL;
+    } else if (value == INFLATED_CELL) {
+        return INFLATED_CELL;
+    } else {
+        return OCCUPIED_CELL;
+    }
+}
+
 __global__ void initMapKernel(char *d_grid_2D, char *d_grid_3D, int numCellsGrid2D, int numCellsGrid3D) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -68,9 +100,24 @@ __global__ void initMapKernel(char *d_grid_2D, char *d_grid_3D, int numCellsGrid
 }
 
 // initialize 3d grid, make every cell false
-void CudaGrid3D::initMap(Map *h_map, float dimX, float dimY, float dimZ, float ox, float oy, float cellSize, float floorMargin, float robotHeight) {
+void CudaGrid3D::initMap(Map *h_map, float dimX, float dimY, float dimZ, float ox, float oy, float oz, float cellSize, float floorMargin, float robotHeight) {
     if (cellSize <= 0.0) {
         printf("ERROR initMap(): cellSize must be bigger than 0.0\n");
+        return;
+    }
+
+    if (ox >= dimX) {
+        printf("ERROR initMap(): ox must be lower than dimX\n");
+        return;
+    }
+
+    if (oy >= dimY) {
+        printf("ERROR initMap(): oy must be lower than dimY\n");
+        return;
+    }
+
+    if (oz >= dimZ) {
+        printf("ERROR initMap(): oz must be lower than dimZ\n");
         return;
     }
 
@@ -80,6 +127,7 @@ void CudaGrid3D::initMap(Map *h_map, float dimX, float dimY, float dimZ, float o
 
     int oxCells = ceil(ox / cellSize);
     int oyCells = ceil(oy / cellSize);
+    int ozCells = ceil(oz / cellSize);
 
     int floorMarginCells = ceil(floorMargin / cellSize);
     int robotHeightCells = ceil(robotHeight / cellSize);
@@ -90,19 +138,20 @@ void CudaGrid3D::initMap(Map *h_map, float dimX, float dimY, float dimZ, float o
 
     h_map->ox = oxCells;
     h_map->oy = oyCells;
+    h_map->oz = ozCells;
 
     h_map->cellSize = cellSize;
 
-    h_map->floorMargin = floorMarginCells;
-    h_map->robotHeight = robotHeightCells;
+    h_map->floorMargin = floorMarginCells + ozCells;
+    h_map->robotHeight = robotHeightCells + ozCells;
 
     if (robotHeightCells < floorMarginCells) {
         printf("ERROR initMap(): robotHeight must be higher than floorMargin\n");
         return;
     }
 
-    if (robotHeightCells * 1.2 > dimZCells) {
-        printf("ERROR initMap(): robotHeight * 1.2 can't be higher than dimZ\n");
+    if (robotHeightCells > dimZCells) {
+        printf("ERROR initMap(): robotHeight can't be higher than dimZ\n");
         return;
     }
 
@@ -293,7 +342,7 @@ void CudaGrid3D::generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int 
     // cudaDeviceSynchronize();
 }
 
-__global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGrid3D::Point *pointcloud, int n, int dimX, int dimY, int dimZ, int ox, int oy, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight) {
+__global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGrid3D::Point *pointcloud, int n, int dimX, int dimY, int dimZ, int ox, int oy, int oz, float cellSize, int floorVoxelsMargin, int robotVoxelsHeight) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     // check if point is within the pointcloud vector of lenght n
@@ -316,6 +365,7 @@ __global__ void insertPointcloudKernel(char *d_grid_2D, char *d_grid_3D, CudaGri
 
         x += ox;
         y += oy;
+        z += oz;
 
         if (x < dimX && y < dimY && z < dimZ && x >= 0 && y >= 0 && z >= 0) {
             int idx3D = getIdx3DDevice(dimX, dimY, dimZ, x, y, z);
@@ -342,7 +392,7 @@ void CudaGrid3D::insertPointcloud(Map *h_map, Point *d_pointcloud, int numPoints
     int numBlocks = (numPoints + 256) / 256;
     // printf("Size of pointcloud: %d\n", numPoints);
 
-    insertPointcloudKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, d_pointcloud, numPoints, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->ox, h_map->oy, h_map->cellSize, h_map->floorMargin, h_map->robotHeight);
+    insertPointcloudKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, d_pointcloud, numPoints, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->ox, h_map->oy, h_map->oz, h_map->cellSize, h_map->floorMargin, h_map->robotHeight);
     // cudaDeviceSynchronize();
 }
 
@@ -883,7 +933,7 @@ __device__ bool checkPointInGridBounds(int dimX, int dimY, int dimZ, CudaGrid3D:
     return false;
 }
 
-__global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointcloud, int numPoints, int dimX, int dimY, int dimZ, int ox, int oy, float cellSize, CudaGrid3D::Point ray_start, bool freeObstacles) {
+__global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointcloud, int numPoints, int dimX, int dimY, int dimZ, int ox, int oy, int oz, float cellSize, CudaGrid3D::Point ray_start, bool freeObstacles) {
     // thread id
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -912,9 +962,11 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
 
         current_voxel.x += ox;
         current_voxel.y += oy;
+        current_voxel.z += oz;
 
         last_voxel.x += ox;
         last_voxel.y += oy;
+        last_voxel.z += oz;
 
         // end the ray a diagonal cell before if freeObstacles is active (true)
 
@@ -1027,7 +1079,7 @@ __global__ void rayTracingKernel(char *d_grid_3D, CudaGrid3D::Point *d_pointclou
 
 void CudaGrid3D::pointcloudRayTracing(Map *h_map, CudaGrid3D::Point *d_pointcloud, int numPoints, CudaGrid3D::Point origin, bool freeObstacles) {
     int numBlocks = (numPoints + 256) / 256;
-    rayTracingKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, d_pointcloud, numPoints, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->ox, h_map->oy, h_map->cellSize, origin, freeObstacles);
+    rayTracingKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, d_pointcloud, numPoints, h_map->dimX, h_map->dimY, h_map->dimZ, h_map->ox, h_map->oy, h_map->oz, h_map->cellSize, origin, freeObstacles);
     cudaDeviceSynchronize();
 }
 
@@ -1106,6 +1158,84 @@ void CudaGrid3D::findFrontiers3D(Map *h_map) {
     int numBlocks = (numPoints + 256) / 256;
     findFrontiers3DKernel<<<numBlocks, 256>>>(h_map->d_grid_3D, h_map->dimX, h_map->dimY, h_map->dimZ);
     cudaDeviceSynchronize();
+}
+
+__global__ void inflateObstacles2DKernel(char *d_grid_2D, int dimX, int dimY, int *d_filter, int filter_size, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (tid < dimX * dimY) {
+        int cellType;
+        int mfr, mfc;
+
+        int mr = tid / dimY;
+        int mc = tid - (mr * dimY);
+
+        cellType = getCellType2DDevice(d_grid_2D[tid], freeThreshold, warningThreshold, occupiedThreshold);
+
+        if (cellType == OCCUPIED_CELL) {  // obstacle
+            for (int fr = 0; fr < filter_size; fr++) {
+                for (int fc = 0; fc < filter_size; fc++) {
+                    mfr = mr + fr - (filter_size - 1) / 2;
+                    mfc = mc + fc - (filter_size - 1) / 2;
+                    if (mfr >= 0 && mfr < dimX && mfc >= 0 && mfc < dimY) {
+                        int idxMfrMfc = mfr * dimY + mfc;
+
+                        cellType = getCellType2DDevice(d_grid_2D[idxMfrMfc], freeThreshold, warningThreshold, occupiedThreshold);
+
+                        int idxFrFc = fr * filter_size + fc;
+
+                        if (cellType == FREE_CELL && d_filter[idxFrFc] != -1) {
+                            d_grid_2D[idxMfrMfc] = d_filter[idxFrFc];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void inflateObstacles2D(CudaGrid3D::Map *h_map, double radius, int freeThreshold, int warningThreshold, int occupiedThreshold) {
+    if (radius <= 0.0) {
+        printf("ERROR inflateObstacles2D(): radius must be bigger than 0.0\n");
+        return;
+    }
+
+    unsigned int filter_size = (unsigned int)floor(2.0 * radius / h_map->cellSize + 0.0001);
+
+    // the filter size should be odd
+    if (filter_size % 2 == 0)
+        filter_size++;
+
+    // create the inflation filter
+    int *h_filter = (int *)malloc(filter_size * filter_size * sizeof(int));
+
+    unsigned int cc, cr;  // central cell of the filter
+    cc = cr = (filter_size - 1) / 2;
+
+    for (unsigned int r = 0; r < filter_size; r++) {
+        for (unsigned int c = 0; c < filter_size; c++) {
+            double cell_distance = sqrt((double)(h_map->cellSize * h_map->cellSize * ((r - cr) * (r - cr) + (c - cc) * (c - cc))));
+            int filter_idx = (r * filter_size) + c;
+            if (cell_distance <= radius)
+                h_filter[filter_idx] = INFLATED_CELL;  // close to obstacle
+            else
+                h_filter[filter_idx] = -1;  // not relevant
+        }
+    }
+
+    int *d_filter;
+    cudaMalloc(&d_filter, filter_size * filter_size * sizeof(int));
+    cudaMemcpy(d_filter, h_filter, filter_size * filter_size * sizeof(int), cudaMemcpyHostToDevice);
+
+    int numCells = h_map->dimX * h_map->dimY;
+
+    int numBlocks = (numCells + 256) / 256;
+
+    inflateObstacles2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->dimX, h_map->dimY, d_filter, filter_size, freeThreshold, warningThreshold, occupiedThreshold);
+    cudaDeviceSynchronize();
+
+    cudaFree(d_filter);
+    free(h_filter);
 }
 
 __global__ void updateGrid2DKernel(char *d_grid_2D, char *d_grid_3D, int dimX, int dimY, int dimZ, int floorVoxelsMargin, int robotVoxelsHeight, int maxUnknownConfidence, int minOccupiedConfidence) {
@@ -1215,7 +1345,7 @@ __global__ void findFrontiers2DKernel(char *d_grid_2D, int dimX, int dimY, int f
     }
 }
 
-void CudaGrid3D::updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int minOccupiedConfidence) {
+void CudaGrid3D::updateGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, int maxUnknownConfidence, int minOccupiedConfidence, double inflationRadius) {
     int dimX = h_map->dimX;
     int dimY = h_map->dimY;
     int dimZ = h_map->dimZ;
@@ -1233,6 +1363,11 @@ void CudaGrid3D::updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfi
     int numBlocks = (numCellsPlane + 256) / 256;
 
     updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, maxUnknownConfidence, minOccupiedConfidence);
+
+    if (inflationRadius >= 0.00001) {
+        printf("inflation...\n");
+        inflateObstacles2D(h_map, inflationRadius, freeThreshold, warningThreshold, occupiedThreshold);
+    }
 
     findFrontiers2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->dimX, h_map->dimY, freeThreshold, minOccupiedConfidence);
     //  cudaDeviceSynchronize();
@@ -1326,38 +1461,6 @@ void CudaGrid3D::getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThres
     dimY = dimY_bin;
 }
 
-int getCellType2D(int value, int freeThreshold, int warningThreshold, int occupiedThreshold) {
-    if (value <= freeThreshold) {
-        return FREE_CELL;
-    } else if (value > freeThreshold && value < warningThreshold) {
-        return UNKNOWN_CELL;
-    } else if (value >= warningThreshold && value < occupiedThreshold) {
-        return WARNING_CELL;
-    } else if (value == FRONTIER_CELL) {
-        return FRONTIER_CELL;
-    } else if (value == INFLATED_CELL) {
-        return INFLATED_CELL;
-    } else {
-        return OCCUPIED_CELL;
-    }
-}
-
-__device__ int getCellType2DDevice(int value, int freeThreshold, int warningThreshold, int occupiedThreshold) {
-    if (value <= freeThreshold) {
-        return FREE_CELL;
-    } else if (value > freeThreshold && value < warningThreshold) {
-        return UNKNOWN_CELL;
-    } else if (value >= warningThreshold && value < occupiedThreshold) {
-        return WARNING_CELL;
-    } else if (value == FRONTIER_CELL) {
-        return FRONTIER_CELL;
-    } else if (value == INFLATED_CELL) {
-        return INFLATED_CELL;
-    } else {
-        return OCCUPIED_CELL;
-    }
-}
-
 Mat getGrid2DTask(CudaGrid3D::Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, bool displayRobotPosition, CudaGrid3D::CudaTransform3D *robotPosition, int markerRadius) {
     Mat error_img;
 
@@ -1446,6 +1549,14 @@ Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, i
 
 Mat CudaGrid3D::getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius) {
     return getGrid2DTask(h_map, freeThreshold, warningThreshold, occupiedThreshold, true, robotPosition, markerRadius);
+}
+
+void CudaGrid3D::getHostGrid(Map *h_map, char **h_grid_2D) {
+    char *grid = (char *)malloc(sizeof(char) * h_map->dimX * h_map->dimY);
+
+    cudaMemcpy(grid, h_map->d_grid_2D, sizeof(char) * h_map->dimX * h_map->dimY, cudaMemcpyDeviceToHost);
+
+    *h_grid_2D = grid;
 }
 
 double euclideanDistance3D(CudaGrid3D::Point *p1, CudaGrid3D::Point *p2) {
@@ -1697,7 +1808,7 @@ void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRad
         CudaGrid3D::Point clusterCentroidInMeters;
         clusterCentroidInMeters.x = (floor(clusterCentroids[i].x) - (h_map->ox)) * h_map->cellSize;
         clusterCentroidInMeters.y = (floor(clusterCentroids[i].y) - (h_map->oy)) * h_map->cellSize;
-        clusterCentroidInMeters.z = (floor(clusterCentroids[i].z)) * h_map->cellSize;
+        clusterCentroidInMeters.z = (floor(clusterCentroids[i].z) - (h_map->oz)) * h_map->cellSize;
 
         double robotCentroidDistance = euclideanDistance3D(&origin, &clusterCentroidInMeters);
         double gain = pointsPerCluster[i] / pow(robotCentroidDistance, 2);
@@ -1729,84 +1840,6 @@ void CudaGrid3D::clusterFrontiers3D(CudaGrid3D::Map *h_map, double maxClusterRad
             free(clusters[i]);
         }
     }
-}
-
-__global__ void inflateObstacles2DKernel(char *d_grid_2D, int dimX, int dimY, int *d_filter, int filter_size, int freeThreshold, int warningThreshold, int occupiedThreshold) {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (tid < dimX * dimY) {
-        int cellType;
-        int mfr, mfc;
-
-        int mr = tid / dimY;
-        int mc = tid - (mr * dimY);
-
-        cellType = getCellType2DDevice(d_grid_2D[tid], freeThreshold, warningThreshold, occupiedThreshold);
-
-        if (cellType == OCCUPIED_CELL) {  // obstacle
-            for (int fr = 0; fr < filter_size; fr++) {
-                for (int fc = 0; fc < filter_size; fc++) {
-                    mfr = mr + fr - (filter_size - 1) / 2;
-                    mfc = mc + fc - (filter_size - 1) / 2;
-                    if (mfr >= 0 && mfr < dimX && mfc >= 0 && mfc < dimY) {
-                        int idxMfrMfc = mfr * dimY + mfc;
-
-                        cellType = getCellType2DDevice(d_grid_2D[idxMfrMfc], freeThreshold, warningThreshold, occupiedThreshold);
-
-                        int idxFrFc = fr * filter_size + fc;
-
-                        if (cellType == FREE_CELL && d_filter[idxFrFc] != -1) {
-                            d_grid_2D[idxMfrMfc] = d_filter[idxFrFc];
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-void CudaGrid3D::inflateObstacles2D(Map *h_map, double radius, int freeThreshold, int warningThreshold, int occupiedThreshold) {
-    if (radius <= 0.0) {
-        printf("ERROR inflateObstacles2D(): radius must be bigger than 0.0\n");
-        return;
-    }
-
-    unsigned int filter_size = (unsigned int)floor(2.0 * radius / h_map->cellSize + 0.0001);
-
-    // the filter size should be odd
-    if (filter_size % 2 == 0)
-        filter_size++;
-
-    // create the inflation filter
-    int *h_filter = (int *)malloc(filter_size * filter_size * sizeof(int));
-
-    unsigned int cc, cr;  // central cell of the filter
-    cc = cr = (filter_size - 1) / 2;
-
-    for (unsigned int r = 0; r < filter_size; r++) {
-        for (unsigned int c = 0; c < filter_size; c++) {
-            double cell_distance = sqrt((double)(h_map->cellSize * h_map->cellSize * ((r - cr) * (r - cr) + (c - cc) * (c - cc))));
-            int filter_idx = (r * filter_size) + c;
-            if (cell_distance <= radius)
-                h_filter[filter_idx] = INFLATED_CELL;  // close to obstacle
-            else
-                h_filter[filter_idx] = -1;  // not relevant
-        }
-    }
-
-    int *d_filter;
-    cudaMalloc(&d_filter, filter_size * filter_size * sizeof(int));
-    cudaMemcpy(d_filter, h_filter, filter_size * filter_size * sizeof(int), cudaMemcpyHostToDevice);
-
-    int numCells = h_map->dimX * h_map->dimY;
-
-    int numBlocks = (numCells + 256) / 256;
-
-    inflateObstacles2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->dimX, h_map->dimY, d_filter, filter_size, freeThreshold, warningThreshold, occupiedThreshold);
-    cudaDeviceSynchronize();
-
-    cudaFree(d_filter);
-    free(h_filter);
 }
 
 __global__ void checkFreePoint2DKernel(char *d_grid_2D, int idx, int freeThreshold, bool *d_result) {
@@ -1935,7 +1968,7 @@ CudaGrid3D::BestObservation CudaGrid3D::bestObservationPoint(Map *h_map, Point c
                 Point pt;
                 pt.x = x;
                 pt.y = y;
-                pt.z = z / h_map->cellSize;
+                pt.z = approxFloat(z / h_map->cellSize) + (h_map->oz);
 
                 candidatePoints[idx] = pt;
                 idx++;
@@ -2041,7 +2074,7 @@ CudaGrid3D::BestObservation CudaGrid3D::bestObservationPoint(Map *h_map, Point c
 
     bestPointMeters.x = (bestPoint.x - (h_map->ox)) * h_map->cellSize;
     bestPointMeters.y = (bestPoint.y - (h_map->oy)) * h_map->cellSize;
-    bestPointMeters.z = bestPoint.z * h_map->cellSize;
+    bestPointMeters.z = (bestPoint.z - (h_map->oz)) * h_map->cellSize;
 
     // printf("best point in meters (%f, %f, %f)\n", bestPointMeters.x, bestPointMeters.y, bestPointMeters.z);
 
