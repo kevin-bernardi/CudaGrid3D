@@ -25,6 +25,7 @@ class Point {
 class Map {
    public:
     char *d_grid_2D;
+    char *d_grid_2D_detailed;
     char *d_grid_3D;
     int dimX = 0;
     int dimY = 0;
@@ -225,18 +226,18 @@ void printPointcloud(Point *d_pointcloud, int numPoints);
 /// @brief Generate a mesh of the 2D grid
 /// @param h_map map
 /// @param path save path of the mesh
-void generateMesh2D(Map *h_map, const char *path);
+void generateMesh2D(Map *h_map, const char *path, bool localMesh);
 
 /// @brief Generate a mesh of the 3D grid (a cube for each occupied cell)
 /// @param h_map map
 /// @param path save path of the mesh
-void generateMesh3D(Map *h_map, const char *path);
+void generateMesh3D(Map *h_map, const char *path, bool localMesh);
 
 /// @brief Generate a simple mesh of the 3D grid (a vertex for each selected cell)
 /// @param h_map map
 /// @param path save path of the mesh
 /// @param isOccupationMesh if true generates a mesh of the occupied space, otherwise a mesh of the free space is created
-void generateSimpleMesh3D(Map *h_map, const char *path, MeshType meshType);
+void generateSimpleMesh3D(Map *h_map, const char *path, MeshType meshType, bool localMesh);
 
 // ------------------------
 
@@ -276,23 +277,26 @@ void getUnknownDensityGrid2D(Map *h_map, int bin_size, int freeThreshold, int oc
 
 /// @brief returns the cv::Mat of the 2D colored grid
 /// @param h_map map
+/// @param detailedGrid if true get the grid with obstacle inflation and frontiers
 /// @param freeThreshold max confidence for a free pixel
 /// @param warningThreshold min confidence for a warning pixel
 /// @param occupiedThreshold min confidence for an occupied pixel
 /// @return 2D occupancy map
-cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold);
+cv::Mat getGrid2D(Map *h_map, bool detailedGrid, int freeThreshold, int warningThreshold, int occupiedThreshold);
 
 /// @brief Get the 2D occupancy map
 /// @param h_map map
+/// @param detailedGrid if true get the grid with obstacle inflation and frontiers
 /// @param freeThreshold max confidence for a free pixel
 /// @param warningThreshold min confidence for a warning pixel
 /// @param occupiedThreshold min confidence for an occupied pixel
 /// @param robotPosition position of the robot (x,y,z coordinates)
 /// @param markerRadius radius of the robot position marker
 /// @return 2D occupancy map
-cv::Mat getGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius);
+cv::Mat getGrid2D(Map *h_map, bool detailedGrid, int freeThreshold, int warningThreshold, int occupiedThreshold, CudaTransform3D *robotPosition, int markerRadius);
 
 void getHostGrid(Map *h_map, char **h_grid_2D);
+void getHostGridDetailed(Map *h_map, char **h_grid_2D_detailed);
 
 /// @brief Cluster the frontier cells of the 3D Grid
 /// @param h_map map

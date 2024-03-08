@@ -44,14 +44,14 @@ int main(int argc, char* argv[]) {
 
     CudaGrid3D::Point* d_pointcloud;
 
-    generateRandomPointcloud(h_map, &d_pointcloud, numPoints);
-    insertPointcloud(h_map, d_pointcloud, numPoints);
+    // generateRandomPointcloud(h_map, &d_pointcloud, numPoints);
+    // insertPointcloud(h_map, d_pointcloud, numPoints);
 
     pointcloudRayTracing(h_map, d_pointcloud, numPoints, ori, false);
     findFrontiers3D(h_map);
     updateGrid2D(h_map, 10, 55, 85, 50, 75, 0);
 
-    generateSimpleMesh3D(h_map, "./mesh.obj", OCCUPANCY_MAP);
+    generateSimpleMesh3D(h_map, "./mesh.obj", OCCUPANCY_MAP, true);
 
     CudaGrid3D::Point centroid;
     IntPoint* cluster;
