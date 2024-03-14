@@ -336,7 +336,7 @@ Update the 2D grid using the data contained in the 3D grid (projection). If `inf
 | occupiedThreshold     | Min confidence to mark a cell as occupied               |
 | maxUnknownConfidence  | Max confidence if every cell in the column is unknown   |
 | minOccupiedConfidence | Min confidence if only 1 cell is occupied in the column |
-| inflationRadius       | Min confidence if only 1 cell is occupied in the column |
+| inflationRadius       | Inflation radius                                        |
 
 
 ## getUnknownDensityGrid2D
