@@ -22,6 +22,7 @@
     - [Frontier Detection](#frontier-detection)
   - [2D Occupancy Map Generation](#2d-occupancy-map-generation)
   - [3D Mesh Generation](#3d-mesh-generation)
+  - [Best Next View](#best-next-view)
 
 ## Introduction
 
@@ -102,7 +103,7 @@ Pointers pointing to an allocated space in the RAM (called host memory) are mark
 ## Map Initialization
 
 The first step to do before inserting pointclouds in the 3D Grid is to initialize the Map, a struct that holds the 2D Grid, the 3D Grid and all the parameters that are needed to make them work as expected.
-To initialize the map just call the function `initMap`. Below you can see a Map initialization of a 3D grid of size 200 x 100 x 50 cells and a 2D grid of size 200 x 100 cells. Both grids have a cell size of 10 centimeters.
+To initialize the map just call the function `initMap`. Below you can see a Map initialization of a 3D grid of size 20 x 10 x 5 meters and a 2D grid of size 20 x 10 meters. Both grids have a cell size of 10 centimeters.
 
 The last 2 arguments (floorVoxelsMargin and robotVoxelsHeight) are used to compute the 2D Grid from the 3D grid and can be overlooked at the moment until the occupation map is explained later.
 
@@ -111,17 +112,17 @@ The last 2 arguments (floorVoxelsMargin and robotVoxelsHeight) are used to compu
 
 [...]
 
-int dimX = 200;
-int dimY = 100;
-int dimZ = 50;
+int dimX = 10;
+int dimY = 20;
+int dimZ = 5;
 float cellSize = 0.10;
-int floorVoxelsMargin = 1;
-int robotVoxelsHeight = 5;
+int floorVoxelsMargin = 0.2;
+int robotVoxelsHeight = 1.5;
 
 CudaGrid3D::Map* h_map = new CudaGrid3D::Map;  
 // the map is allocated on the host memory
 
-initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
+CudaGrid3D::initMap(h_map, dimX, dimY, dimZ, ox, oy, oz, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 ```
 
 > WARNING: The grids contained in the `Map` can't be directly accessed because are allocated on the device memory. The grids can be accessed or manipulated using only the functions provided by the library.
@@ -150,7 +151,7 @@ Example 1: the pointcloud has already the right type:
 
 ```c++
 CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
+CudaGrid3D::initMap(h_map, dimX, dimY, dimZ, ox, oy, oz, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
 CudaGrid3D::Point* d_pointcloud;
 
@@ -170,10 +171,10 @@ h_pointcloud[2] = pt;
 // the host pointcloud must be converted to a device pointcloud
 // d_pointcloud must be a pointer to a pointer 
 // (this is why we pass the address of the pointer)
-initDevicePointcloud(&d_pointcloud, h_pointcloud, numPoints);
+CudaGrid3D::initDevicePointcloud(&d_pointcloud, h_pointcloud, numPoints);
 
 // insert the points in the 3D Grid
-insertPointcloud(h_map, d_pointcloud, numPoints);
+CudaGrid3D::insertPointcloud(h_map, d_pointcloud, numPoints);
 ```
 
 Example 2: the camera gives a cv::Mat containing the points:
@@ -195,7 +196,7 @@ int main(){
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
+    CudaGrid3D::initMap(h_map, dimX, dimY, dimZ, ox, oy, oz, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     // pointcloud_raw is the data received by a sensor / camera etc.
     cv::Mat pointcloud_raw;
@@ -206,11 +207,11 @@ int main(){
 
     int length;
     
-    
+    // function not included in the CudaGrid3D library
     cvMatToArray(&pointcloud_raw, &h_arr, &length);
 
     // convert an array of coordinates into a pointcloud without rototranslations
-    arrayToPointcloud(h_arr, length, &d_pointcloud);
+    CudaGrid3D::arrayToPointcloud(h_arr, length, &d_pointcloud);
 
     // insert the points in the 3D Grid
     // the number of points is length / 4 because the pointcloud is an array of Points while
@@ -218,7 +219,7 @@ int main(){
     // so the number of points is the length of the array divided by 4
 
     int numPoints = length / 4;
-    insertPointcloud(h_map, d_pointcloud, numPoints);
+    CudaGrid3D::insertPointcloud(h_map, d_pointcloud, numPoints);
 
     [...]
 }
@@ -228,7 +229,7 @@ int main(){
 
 The function `arrayToPointcloud` can also rototranslate all the points based on the CudaTransform3D object passed to the function. The CudaTransform3D is a struct that contains the vector of translation and the matrix of rotation. These informations are needed to rotate and translate the pointcloud.
 To rototranslate the pointcloud just pass the CudaTransform3D as the last argument of the function.
-This function in GPU accelerated. If your applications requires pointcloud rototranslation, doing it using this function will result in better performance.
+This function is GPU accelerated. If your applications requires pointcloud rototranslation, doing it using this function will result in better performance.
 
 
 ## Create a Random Pointcloud
@@ -246,12 +247,12 @@ The `generateRandomPointcloud` function doesn't require the pointcloud initializ
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
+    CudaGrid3D::initMap(h_map, dimX, dimY, dimZ, ox, oy, oz, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     CudaGrid3D::Point* d_pointcloud;
 
-    generateRandomPointcloud(h_map, &d_pointcloud, numPoints);
-    insertPointcloud(h_map, d_pointcloud, numPoints);
+    CudaGrid3D::generateRandomPointcloud(h_map, &d_pointcloud, numPoints);
+    CudaGrid3D::insertPointcloud(h_map, d_pointcloud, numPoints);
 
 
     [...]
@@ -277,7 +278,7 @@ Here is a short example:
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
+    CudaGrid3D::initMap(h_map, dimX, dimY, dimZ, ox, oy, oz, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     CudaGrid3D::Point* d_pointcloud;
     int pointcloud_length;
@@ -286,7 +287,7 @@ Here is a short example:
     // pointcloud conversions or generation
     // ...
 
-    insertPointcloud(h_map, d_pointcloud, pointcloud_length);
+    CudaGrid3D::insertPointcloud(h_map, d_pointcloud, pointcloud_length);
 
     // coordinates of the camera when it acquired the pointcloud
     CudaGrid3D::Point camera_coords;
@@ -296,7 +297,7 @@ Here is a short example:
 
     bool freeObstacles = false;
 
-    pointcloudRayTracing(h_map, d_pointcloud, pointcloud_length, camera_coords, freeObstacles);
+    CudaGrid3D::pointcloudRayTracing(h_map, d_pointcloud, pointcloud_length, camera_coords, freeObstacles);
 
     [...]
 ```
@@ -343,7 +344,7 @@ For each cell `(x,y, z>= floorVoxelsMargin and z < robotVoxelsHeight)` in the 2D
 
 ### Frontier Detection
 
-When the function `updateGrid2D` is called, after the 2D grid update an algorithm for frontier detection is runned. The frontier detection algorithm marks as frontier all the free cells on the 2D grid that have at least a common side to an unknown cell.
+When the function `updateGrid2D` is called, after the 2D grid update an algorithm for frontier detection is runned. The frontier detection algorithm marks as frontier all the free cells on the 2D grid that have at least a common side to a certain number of unknown cell (usually 1-3).
 
 ## 2D Occupancy Map Generation
 
@@ -385,7 +386,7 @@ Here is an example on how to use both `updateGrid2D` and `getGrid2D`:
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
+    CudaGrid3D::initMap(h_map, dimX, dimY, dimZ, ox, oy, oz, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     // ...
     // pointcloud insertion in the 3D grid
@@ -396,11 +397,11 @@ Here is an example on how to use both `updateGrid2D` and `getGrid2D`:
     // ...
 
     // update the 2D grid using the 3D grid (projection)
-    updateGrid2D(h_map, freeThreshold, maxUnknownConfidence, minOccupiedConfidence);
+    CudaGrid3D::updateGrid2D(h_map, freeThreshold, maxUnknownConfidence, minOccupiedConfidence);
 
     
     // occupancy grid without the robot position marker
-    cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold);
+    cv::Mat occupancyMap = CudaGrid3D::getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold);
 
 
     // --- ALTERNATIVELY ---
@@ -410,7 +411,7 @@ Here is an example on how to use both `updateGrid2D` and `getGrid2D`:
     CudaGrid3D::CudaTransform3D robot_position;
     int marker_radius = 3;
 
-    cv::Mat occupancyMap = getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold, &robot_position, marker_radius);
+    cv::Mat occupancyMap = CudaGrid3D::getGrid2D(h_map, freeThreshold, warningThreshold, occupiedThreshold, &robot_position, marker_radius);
     // ---------------------
 
     // display the occupancy 2D map
@@ -442,7 +443,7 @@ Here is a simple example for 3D mesh generation:
 
 
     CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
-    initMap(h_map, dimX, dimY, dimZ, cellSize, floorVoxelsMargin, robotVoxelsHeight);
+    CudaGrid3D::initMap(h_map, dimX, dimY, dimZ, ox, oy, oz, cellSize, floorVoxelsMargin, robotVoxelsHeight);
 
     // ...
     // pointcloud insertion in the 3D grid
@@ -453,18 +454,74 @@ Here is a simple example for 3D mesh generation:
     // ...
 
     // complete mesh generation
-    generateMesh3D(h_map, "./mesh.obj");
+    CudaGrid3D::generateMesh3D(h_map, "./mesh.obj");
 
     // simple mesh generation
 
     MeshType meshType = OCCUPANCY_MAP;
-    generateSimpleMesh3D(h_map, "./simple_mesh.obj", meshType);
+    CudaGrid3D::generateSimpleMesh3D(h_map, "./simple_mesh.obj", meshType);
 
     [...]
 ```
 
+## Best Next View
+
+This library provides a function to efficiently computer the next best view.
+The next best view is a point in the 3D space where it's best to position the sensor that acquires 3D data (3D pointclouds) to capture a big unknown area of the environment with minimum travel distance.
+This functions groups the frontier cells with a clustering algorithm. A score is assigned to each cluster to understand which is the best one.
+The score increases if the cluster contains a higher number of frontier cells and it decreases if the cluster center is further away from the robot current position.
+
+Once the best cluster is found, many circumferences are drawn on different planes from `z_min` to `z_max` every `z_interval` meters.
+The center of each circumference corresponds to the 2D projection of the cluster center and the radius is equal to the 2D projection of the specified 3D distance from where I want to observe the cluster (calculated using Pythagorean theorem).
+
+On these circumferences, every `angleIntervalDeg` degrees a candidate point is found.
+
+A filter is applied to eliminate the candidatePoints that are not in free space.
+
+For each remaining point, a ray tracing algorithm computes the number of cluster frontiers directly visible from the candidate point. If there's an obstacle between the candidate point and the frontier, the frontier is not counted as directly visible.
+
+The function returns the best candidate point (the next best view) in the free space.
+
+Here is a code snippet to use the next best view functionality:
+
+```c++
+
+    [...]
 
 
+    CudaGrid3D::Map* h_map = new CudaGrid3D::Map;
+    CudaGrid3D::initMap(h_map, dimX, dimY, dimZ, ox, oy, oz, cellSize, floorVoxelsMargin, robotVoxelsHeight);
+
+    // ...
+    // pointcloud insertion in the 3D grid
+    // ...
+
+    // ...
+    // free volume computation with ray tracing
+    // ...
 
 
+    // find the frontiers in the 3D grid
+    findFrontiers3D(h_map);
 
+    // center of the best cluster
+    CudaGrid3D::Point centroid;
+
+    // array of the frontiers inside the best cluster
+    IntPoint* cluster;
+
+    // number of frontiers inside the best cluster
+    int sizeCluster;
+
+    double maxClusterRadius
+
+    // cluster the frontier cells in the 3D grid and get the best cluster
+    clusterFrontiers3D(h_map, maxClusterRadius, robot_position, &centroid, &cluster, &sizeCluster);
+
+    // compute the next best view
+    CudaGrid3D::BestObservation nextBestView;
+
+    nextBestView = CudaGrid3D::bestObservationPoint(h_map, clusterCenterMeters, cluster, sizeCluster, clusterDistanceMeters, angleIntervalDeg, freeThreshold, z_min, z_max, z_interval);
+
+    [...]
+```

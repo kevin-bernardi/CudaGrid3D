@@ -1,12 +1,25 @@
-# Functions Reference
+# CudaGrid3D Reference
 
+- [CudaGrid3D Reference](#cudagrid3d-reference)
+- [Data Structures Reference](#data-structures-reference)
+  - [Point](#point)
+  - [IntPoint](#intpoint)
+  - [Map](#map)
+  - [CudaTransform3D](#cudatransform3d)
+  - [BestObservation](#bestobservation)
+  - [MeshType (enumerator)](#meshtype-enumerator)
 - [Functions Reference](#functions-reference)
   - [initMap](#initmap)
   - [freeMap](#freemap)
   - [initDevicePointcloud](#initdevicepointcloud)
   - [freeDevicePointcloud](#freedevicepointcloud)
+  - [generateRandomPointcloud](#generaterandompointcloud)
   - [insertPointcloud](#insertpointcloud)
   - [arrayToPointcloud](#arraytopointcloud)
+  - [printDeviceGrid2D](#printdevicegrid2d)
+  - [printDeviceGrid3D](#printdevicegrid3d)
+  - [printDeviceLinearGrid2D](#printdevicelineargrid2d)
+  - [printDeviceLinearGrid3D](#printdevicelineargrid3d)
   - [printPointcloud](#printpointcloud)
   - [generateMesh2D](#generatemesh2d)
   - [generateMesh3D](#generatemesh3d)
@@ -17,8 +30,73 @@
   - [getUnknownDensityGrid2D](#getunknowndensitygrid2d)
   - [getGrid2D](#getgrid2d)
   - [clusterFrontiers3D](#clusterfrontiers3d)
-  - [inflateObstacles2D](#inflateobstacles2d)
-  - [bestObservationPoint2D](#bestobservationpoint2d)
+  - [bestObservationPoint](#bestobservationpoint)
+
+
+# Data Structures Reference
+
+## Point
+
+| Field Type | Field Name |
+| ---------- | ---------- |
+| double     | x          |
+| double     | y          |
+| double     | z          |
+
+## IntPoint
+
+| Field Type   | Field Name |
+| ------------ | ---------- |
+| unsigned int | x          |
+| unsigned int | y          |
+| unsigned int | z          |
+
+## Map
+
+| Field Type | Field Name         |
+| ---------- | ------------------ |
+| char*      | d_grid_2D          |
+| char*      | d_grid_2D_detailed |
+| char*      | d_grid_3D          |
+| int        | dimX               |
+| int        | dimY               |
+| int        | dimZ               |
+| int        | ox                 |
+| int        | oy                 |
+| int        | oz                 |
+| float      | cellSize           |
+| int        | floorMargin        |
+| int        | robotHeight        |
+
+## CudaTransform3D
+
+| Field Type   | Field Name |
+| ------------ | ---------- |
+| double[3]    | tra        |
+| double[3][3] | rot        |
+
+## BestObservation
+
+
+| Field Type | Field Name |
+| ---------- | ---------- |
+| Point      | point      |
+| double     | pitch      |
+| double     | yaw        |
+
+## MeshType (enumerator)
+
+| Option        |
+| ------------- |
+| OCCUPANCY_MAP |
+| FREE_MAP      |
+| FRONTIER_MAP  |
+
+
+
+# Functions Reference
+
+
 
 
 ## initMap
@@ -35,6 +113,7 @@ Initialize the Map on the host and the grids (both 2D and 3D) on the device.
 | dimZ        | Length of the z-axis of the grid (meters)                |
 | ox          | Position of the origin on the x-axis (meters)            |
 | oy          | Position of the origin on the y-axis (meters)            |
+| oz          | Position of the origin on the z-axis (meters)            |
 | cellSize    | Edge length of each cell (meters)                        |
 | floorMargin | Floor margin to not consider in 2D grid updates (meters) |
 | robotHeight | Height of the robot (meters)                             |
@@ -80,6 +159,18 @@ Free the pointcloud space allocated in the device memory.
 | ------------ | ----------- |
 | d_pointcloud | Pointcloud  |
 
+## generateRandomPointcloud
+
+`void generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int numPoints)`
+
+Generate a random pointcloud of length `numPoints`. The allocation of the space required is done by the function.
+
+| Parameter    | Description                        |
+| ------------ | ---------------------------------- |
+| h_map        | Map struct                         |
+| d_pointcloud | Non allocated pointcloud           |
+| numPoints    | Number of points in the pointcloud |
+
 ## insertPointcloud
 
 `void insertPointcloud(Map *h_map, Point *d_pointcloud, int numPoints)`
@@ -91,6 +182,8 @@ Inserts the points of the pointcloud in the 3D grid.
 | h_map        | Map struct                         |
 | d_pointcloud | Pointcloud allocated on the device |
 | numPoints    | Number of points in the pointcloud |
+
+
 
 ## arrayToPointcloud
 
@@ -115,6 +208,47 @@ Converts an array of points in the format [point0_x, point0_y, point0_z, point0_
 | d_pointcloud | Number of points in the pointcloud                                 |
 | tf           | CudaTransform3D object with translation vector and rotation matrix |
 
+## printDeviceGrid2D
+
+`void printDeviceGrid2D(Map *h_map)`
+
+Print the 2D grid allocated on the device memory as a 2D plane.
+
+| Parameter | Description |
+| --------- | ----------- |
+| h_map     | Map struct  |
+
+## printDeviceGrid3D
+
+`void printDeviceGrid3D(Map *h_map)`
+
+Print the 3D grid allocated on the device memory as many 2D planes.
+
+| Parameter | Description |
+| --------- | ----------- |
+| h_map     | Map struct  |
+
+## printDeviceLinearGrid2D
+
+`void printDeviceLinearGrid2D(Map *h_map)`
+
+Print the 2D grid allocated on the device memory as a 1D array.
+
+| Parameter | Description |
+| --------- | ----------- |
+| h_map     | Map struct  |
+
+## printDeviceLinearGrid3D
+
+`void printDeviceLinearGrid3D(Map *h_map)`
+
+Print the 3D grid allocated on the device memory as a 1D array.
+
+| Parameter | Description |
+| --------- | ----------- |
+| h_map     | Map struct  |
+
+
 ## printPointcloud
 
 `void printPointcloud(Point *d_pointcloud, int numPoints)`
@@ -128,37 +262,40 @@ Print the device pointcloud.
 
 ## generateMesh2D
 
-`void generateMesh2D(Map *h_map, const char *path)`
+`void generateMesh2D(Map *h_map, const char *path, bool localMesh)`
 
 Generate a mesh of the 2D occupancy grid.
 
-| Parameter | Description                     |
-| --------- | ------------------------------- |
-| h_map     | Map struct                      |
-| path      | Save path of the generated mesh |
+| Parameter | Description                                                                             |
+| --------- | --------------------------------------------------------------------------------------- |
+| h_map     | Map struct                                                                              |
+| path      | Save path of the generated mesh                                                         |
+| localMesh | If true, generate the mesh with its origin in the position of the origin of the 2D grid |
 
 ## generateMesh3D
 
-`void generateMesh3D(Map *h_map, const char *path)`
+`void generateMesh3D(Map *h_map, const char *path, bool localMesh)`
 
 Generate a mesh of the 3D grid.
 
-| Parameter | Description                     |
-| --------- | ------------------------------- |
-| h_map     | Map struct                      |
-| path      | Save path of the generated mesh |
+| Parameter | Description                                                                             |
+| --------- | --------------------------------------------------------------------------------------- |
+| h_map     | Map struct                                                                              |
+| path      | Save path of the generated mesh                                                         |
+| localMesh | If true, generate the mesh with its origin in the position of the origin of the 3D grid |
 
 ## generateSimpleMesh3D
 
-`void generateSimpleMesh(Map *h_map, const char *path, MeshType meshType)`
+`void generateSimpleMesh(Map *h_map, const char *path, MeshType meshType, bool localMesh)`
 
 Generate a simple mesh of the 3D grid. If `meshType` is set to `OCCUPANCY_MAP` a vertex is inserted in the mesh for each occupied cell. If `meshType` is set to `FREE_MAP` there will be a vertex for each free cell and if `meshType` is set to `FRONTIER_MAP` there will be a vertex for each frontier cell.
 
-| Parameter | Description                                                                           |
-| --------- | ------------------------------------------------------------------------------------- |
-| h_map     | Map struct                                                                            |
-| path      | Save path of the generated mesh                                                       |
-| meshType  | Mesh type to be created. Possible values: `OCCUPANCY_MAP`, `FREE_MAP`, `FRONTIER_MAP` |
+| Parameter | Description                                                                             |
+| --------- | --------------------------------------------------------------------------------------- |
+| h_map     | Map struct                                                                              |
+| path      | Save path of the generated mesh                                                         |
+| meshType  | Mesh type to be created. Possible values: `OCCUPANCY_MAP`, `FREE_MAP`, `FRONTIER_MAP`   |
+| localMesh | If true, generate the mesh with its origin in the position of the origin of the 3D grid |
 
 ## pointcloudRayTracing
 
@@ -187,16 +324,19 @@ Find the frontier cells in the 3D grid. A frontier cell is a free voxel in the 3
 
 ## updateGrid2D
 
-`void updateGrid2D(Map *h_map, int freeThreshold, int maxUnknownConfidence, int minOccupiedConfidence)`
+`void updateGrid2D(Map *h_map, int freeThreshold, int warningThreshold, int maxUnknownConfidence, int minOccupiedConfidence)`
 
-Update the 2D grid using the data contained in the 3D grid (projection).
+Update the 2D grid using the data contained in the 3D grid (projection). If `inflationRadius` is greater than 0, obstacles are inflated for a secure robot navigation.
 
 | Parameter             | Description                                             |
 | --------------------- | ------------------------------------------------------- |
 | h_map                 | Map struct                                              |
 | freeThreshold         | Max confidence to mark a cell as free                   |
+| warningThreshold      | Min confidence to mark a cell as probably occupied      |
+| occupiedThreshold     | Min confidence to mark a cell as occupied               |
 | maxUnknownConfidence  | Max confidence if every cell in the column is unknown   |
 | minOccupiedConfidence | Min confidence if only 1 cell is occupied in the column |
+| inflationRadius       | Min confidence if only 1 cell is occupied in the column |
 
 
 ## getUnknownDensityGrid2D
@@ -256,36 +396,25 @@ Cluster the frontier cells of the 3D Grid using a combination of k-means (with k
 | cluster                | List of points in the best cluster (result)                                                                                      |
 | sizeCluster            | Number of points in the best cluster (result)                                                                                    |
 
-## inflateObstacles2D
 
-`void inflateObstacles2D(Map *h_map, double radius, int freeThreshold, int warningThreshold, int occupiedThreshold)`
+## bestObservationPoint
 
-Inflate the obstacles in the 2D occupancy map
-
-| Parameter         | Description                         |
-| ----------------- | ----------------------------------- |
-| h_map             | Map struct                          |
-| radius            | Inflation radius                    |
-| freeThreshold     | Max confidence for a free cell      |
-| warningThreshold  | Min confidence for a warning cell   |
-| occupiedThreshold | Min confidence for an occupied cell |
-
-## bestObservationPoint2D
-
-`CudaGrid3D::Point bestObservationPoint2D(Map *h_map, CudaGrid3D::Point clusterCenterMeters, CudaGrid3D::IntPoint *cluster, int sizeCluster, double radiusMeters, double angleIntervalDeg, int freeThreshold, double cameraHeightMeters)`
+`CudaGrid3D::Point bestObservationPoint2D(Map *h_map, CudaGrid3D::Point clusterCenterMeters, CudaGrid3D::IntPoint *cluster, int sizeCluster, double clusterDistanceMeters, double angleIntervalDeg, int freeThreshold, double z_min, double z_max, double z_interval)`
 
 Compute the best point in the map to observe the cluster. The points are searched on the circumference on the 2D map with the centre as the projected cluster centroid on the 2D map and with a specified radius
 
-| Parameter           | Description                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------- |
-| h_map               | Map struct                                                                                              |
-| clusterCenterMeters | Centroid of the cluster to observe (coordinates in meters)                                              |
-| cluster             | Array of points of the cluster to observe                                                               |
-| sizeCluster         | Number of points in the cluster to observe                                                              |
-| radiusMeters        | Distance from the projected cluster centroid on the 2D map where to look for the best observation point |
-| angleIntervalDeg    | Search for a point every x degrees on the circumference                                                 |
-| freeThreshold       | Max confidence for a free cell                                                                          |
-| cameraHeightMeters  | Camera z-position (meters)                                                                              |
+| Parameter             | Description                                                                                   |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| h_map                 | Map struct                                                                                    |
+| clusterCenterMeters   | Centroid of the cluster to observe (coordinates in meters)                                    |
+| cluster               | Array of points of the cluster to observe                                                     |
+| sizeCluster           | Number of points in the cluster to observe                                                    |
+| clusterDistanceMeters | Distance from the cluster centroid on the 3D map where to look for the best observation point |
+| angleIntervalDeg      | Search for a point every x degrees on the circumference                                       |
+| freeThreshold         | Max confidence for a free cell                                                                |
+| z_min                 | Lowest plane on z axis (meters)                                                               |
+| z_max                 | Highest plane on z-axis (meters)                                                              |
+| z_interval            | Select a plane every z_interval meters (meters)                                               |
 
 
 

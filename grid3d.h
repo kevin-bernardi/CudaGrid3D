@@ -123,7 +123,7 @@ void freeDevicePointcloud(Point *d_pointcloud);
 
 /// @brief Generate a pointcloud with n random points
 /// @param h_map map
-/// @param d_pointcloud pointcloud
+/// @param d_pointcloud non allocated pointcloud
 /// @param numPoints number of points
 void generateRandomPointcloud(Map *h_map, Point **d_pointcloud, int numPoints);
 
@@ -316,7 +316,9 @@ void clusterFrontiers3D(Map *h_map, double maxClusterRadiusMeters, CudaGrid3D::P
 /// @param radiusMeters distance from the projected cluster centroid on the 2D map where to look for the best observation point
 /// @param angleIntervalDeg search for a point every x degrees on the circumference
 /// @param freeThreshold max confidence for a free cell
-/// @param cameraHeightMeters camera z-position
+/// @param z_min lowest plane on z axis (meters)
+/// @param z_max highest plane on z-axis (meters)
+/// @param z_interval select a plane every z_interval meters (meters)
 /// @return best observation point (coordinates in meters)
 BestObservation bestObservationPoint(Map *h_map, CudaGrid3D::Point clusterCenterMeters, CudaGrid3D::IntPoint *cluster, int sizeCluster, double clusterDistanceMeters, double angleIntervalDeg, int freeThreshold, double z_min, double z_max, double z_interval);
 

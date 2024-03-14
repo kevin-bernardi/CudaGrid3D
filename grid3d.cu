@@ -324,10 +324,6 @@ __global__ void generateRandomPcKernel(CudaGrid3D::Point *pointcloud, int n, cur
     float dimZ_meters = dimZ * cellSize;
 
     if (tid < n) {
-        if (tid == n - 1) {
-            printf("Generating random pointcloud in kernel\n");
-        }
-
         curand_init(clock(), tid, 0, &state[tid]);
 
         float x = (curand_uniform(&(state[tid])) * dimX_meters) - (dimX_meters / 2.0);
@@ -1420,7 +1416,7 @@ void CudaGrid3D::updateGrid2D(Map *h_map, int freeThreshold, int warningThreshol
     updateGrid2DKernel<<<numBlocks, 256>>>(h_map->d_grid_2D, h_map->d_grid_2D_detailed, h_map->d_grid_3D, dimX, dimY, dimZ, minZ, maxZ, maxUnknownConfidence, minOccupiedConfidence);
 
     if (inflationRadius >= 0.00001) {
-        printf("inflation...\n");
+        // printf("inflation...\n");
         inflateObstacles2D(h_map, inflationRadius, freeThreshold, warningThreshold, occupiedThreshold);
     }
 
